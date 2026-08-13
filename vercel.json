@@ -1,0 +1,47 @@
+{
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://vercel.live https://*.jitsi.net https://www.youtube.com https://s.ytimg.com https://*.daily.co; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://vercel.live; img-src 'self' data: blob: https://res.cloudinary.com https://*.supabase.co https://*.supabase.in https://placehold.co https://vercel.live https://*.vercel.live https://*.ytimg.com https://*.youtube.com https://*.tiktokcdn.com https://*.daily.co; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://qxeqaqmsanfjeekybilp.supabase.co wss://qxeqaqmsanfjeekybilp.supabase.co https://*.supabase.co wss://*.supabase.co https://*.supabase.in https://dmksytemebackend.onrender.com http://localhost:5000 https://res.cloudinary.com https://vercel.live https://*.vercel.live wss://*.vercel.live https://*.jitsi.net wss://*.jitsi.net https://meet.jit.si wss://meet.jit.si https://*.youtube.com https://*.googlevideo.com https://*.tiktok.com https://*.daily.co wss://*.daily.co https://api.daily.co; frame-src 'self' https://pay.wave.com https://vercel.live https://meet.jit.si https://*.jitsi.net https://www.youtube.com https://youtube.com https://www.youtube-nocookie.com https://youtu.be https://www.tiktok.com https://tiktok.com https://*.daily.co; object-src 'none'; base-uri 'self'; form-action 'self' https://pay.wave.com; media-src 'self' blob: mediastream:;"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "SAMEORIGIN"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=63072000; includeSubDomains; preload"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(self \"https://meet.jit.si\" \"https://*.daily.co\"), microphone=(self \"https://meet.jit.si\" \"https://*.daily.co\"), display-capture=(self \"https://meet.jit.si\" \"https://*.daily.co\"), geolocation=()"
+        },
+        {
+          "key": "Server",
+          "value": ""
+        },
+        {
+          "key": "X-Powered-By",
+          "value": ""
+        }
+      ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

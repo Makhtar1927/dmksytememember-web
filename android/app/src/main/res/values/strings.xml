@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">DMK</string>
+    <string name="title_activity_main">DMK</string>
+    <string name="package_name">com.makhtar2004.dmk</string>
+    <string name="custom_url_scheme">com.makhtar2004.dmk</string>
+</resources>

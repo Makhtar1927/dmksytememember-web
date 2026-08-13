@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-primary: #152238; /* Based on the DMK brand color */
+  --color-secondary: #0A1118;
+}
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50 transition-colors duration-500;
+  }
+}
+
+body.hide-bottom-nav nav.fixed.bottom-0,
+body.hide-bottom-nav .fab-button {
+  display: none !important;
+}
+
+/* Custom CSS classes to avoid inline styles */
+.anim-duration-8s {
+  animation-duration: 8s;
+}
+
+.anim-duration-10s {
+  animation-duration: 10s;
+}
+
+.anim-duration-12s {
+  animation-duration: 12s;
+}
+
+.card-pattern-overlay {
+  background-image: repeating-linear-gradient(45deg, #fff 0, #fff 1px, transparent 0, transparent 50%);
+  background-size: 10px 10px;
+}
