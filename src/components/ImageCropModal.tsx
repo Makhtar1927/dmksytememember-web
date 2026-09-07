@@ -1,4 +1,5 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { createPortal } from "react-dom";
 import ReactCrop, { type Crop, type PixelCrop, centerCrop, makeAspectCrop } from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
 import { X, Check, ZoomIn, ZoomOut, RotateCw, RotateCcw, Rotate3d, Loader2 } from "lucide-react";
@@ -58,6 +59,15 @@ export default function ImageCropModal({ imageSrc, fileName, onConfirm, onCancel
   const imgRef = useRef<HTMLImageElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
 
+  // Lock background scrolling while modal is open
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, []);
+
   const onImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
     const { width, height } = e.currentTarget;
     setCrop(centerAspectCrop(width, height, 1));
@@ -91,10 +101,13 @@ export default function ImageCropModal({ imageSrc, fileName, onConfirm, onCancel
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-[99999] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4">
+  // Render via createPortal to mount directly to document.body,
+  // completely escaping any parent stacking contexts, overflow containers,
+  // the mobile bottom navigation bar (z-50), and the floating card button (FAB z-50).
+  return createPortal(
+    <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/85 backdrop-blur-md p-3 sm:p-4">
       <div
-        className="w-full sm:max-w-lg bg-white dark:bg-slate-900 rounded-t-[28px] sm:rounded-[32px] shadow-2xl border border-slate-200/80 dark:border-slate-800 flex flex-col overflow-hidden max-h-[94vh] sm:max-h-[92vh] animate-in fade-in slide-in-from-bottom-4 duration-200"
+        className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-[28px] sm:rounded-[32px] shadow-2xl border border-slate-200/80 dark:border-slate-800 flex flex-col overflow-hidden max-h-[92vh] sm:max-h-[90vh] animate-in fade-in zoom-in-95 duration-200"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 pt-4 sm:pt-6 pb-3 sm:pb-4 shrink-0 border-b border-slate-100 dark:border-slate-800">
@@ -136,7 +149,7 @@ export default function ImageCropModal({ imageSrc, fileName, onConfirm, onCancel
               src={imageSrc}
               style={{
                 transform: `scale(${scale}) rotate(${rotate}deg)`,
-                maxHeight: "35vh",
+                maxHeight: "34vh",
                 maxWidth: "100%",
                 objectFit: "contain",
                 transition: "transform 0.1s ease-out",
@@ -146,7 +159,7 @@ export default function ImageCropModal({ imageSrc, fileName, onConfirm, onCancel
           </ReactCrop>
         </div>
 
-        {/* Controls - Optimized for mobile & desktop */}
+        {/* Controls */}
         <div className="px-4 sm:px-6 py-3 sm:py-4 space-y-2.5 sm:space-y-3 border-t border-slate-100 dark:border-slate-800 shrink-0 bg-slate-50/50 dark:bg-slate-900/80">
           {/* Zoom Slider */}
           <div className="flex items-center gap-2 sm:gap-3">
@@ -224,13 +237,13 @@ export default function ImageCropModal({ imageSrc, fileName, onConfirm, onCancel
         {/* Hidden canvas for offscreen high-res render */}
         <canvas ref={previewCanvasRef} className="hidden" />
 
-        {/* Actions - Safe area padding for mobile navigation bars */}
-        <div className="px-4 sm:px-6 pt-2 pb-4 sm:pb-6 flex gap-2.5 sm:gap-3 shrink-0 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800">
+        {/* Actions - High contrast, touch-friendly, strictly in foreground */}
+        <div className="px-4 sm:px-6 pt-3 pb-4 sm:pb-6 flex gap-2.5 sm:gap-3 shrink-0 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800">
           <button
             type="button"
             onClick={onCancel}
             disabled={isProcessing}
-            className="flex-1 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs sm:text-sm hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-[0.98] transition-all disabled:opacity-50"
+            className="flex-1 py-3 rounded-xl sm:rounded-2xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs sm:text-sm hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-[0.98] transition-all disabled:opacity-50"
           >
             Annuler
           </button>
@@ -238,22 +251,23 @@ export default function ImageCropModal({ imageSrc, fileName, onConfirm, onCancel
             type="button"
             onClick={handleConfirm}
             disabled={!completedCrop || isProcessing}
-            className="flex-1 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 sm:gap-2 shadow-md shadow-blue-600/30 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 py-3 rounded-xl sm:rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 sm:gap-2 shadow-lg shadow-blue-600/30 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isProcessing ? (
               <>
-                <Loader2 size={15} className="animate-spin" />
+                <Loader2 size={16} className="animate-spin" />
                 <span>Traitement...</span>
               </>
             ) : (
               <>
-                <Check size={15} />
+                <Check size={16} />
                 <span>Confirmer la photo</span>
               </>
             )}
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
