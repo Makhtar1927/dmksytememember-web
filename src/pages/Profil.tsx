@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { subscribeToPushNotifications, checkPushNotificationStatus, unsubscribeFromPushNotifications } from '../utils/pushNotifications';
 import { uploadMemberPhoto } from '../utils/photoUpload';
+import ImageCropModal from '../components/ImageCropModal';
 
 type MemberInfo = {
   id: string;
@@ -42,6 +43,9 @@ export default function Profil() {
   const [isPushEnabled, setIsPushEnabled] = useState(false);
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [pushFeedback, setPushFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
+  const [cropFileName, setCropFileName] = useState<string>('');
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   // Edit mode state
   const [isEditing, setIsEditing] = useState(false);
@@ -122,20 +126,36 @@ export default function Profil() {
     fetchUserData();
   }, [user]);
 
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0 || !user?.email) return;
     const file = e.target.files[0];
+    const reader = new FileReader();
+    reader.addEventListener('load', () => {
+      setCropImageSrc(reader.result as string);
+      setCropFileName(file.name);
+    });
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleCropConfirm = async (croppedFile: File) => {
+    if (!user?.email) return;
+    setCropImageSrc(null);
     setIsUploading(true);
     try {
-      const newPhotoUrl = await uploadMemberPhoto(file, user.email);
+      const newPhotoUrl = await uploadMemberPhoto(croppedFile, user.email);
       setMemberInfo((prev) => prev ? { ...prev, photo_url: newPhotoUrl } : prev);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Erreur lors de l'envoi de la photo.";
       alert(msg);
     } finally {
       setIsUploading(false);
-      e.target.value = '';
     }
+  };
+
+  const handleCropCancel = () => {
+    setCropImageSrc(null);
+    setCropFileName('');
   };
 
   const handleStartEdit = () => {
@@ -235,7 +255,7 @@ export default function Profil() {
           </div>
           <label className="absolute -bottom-2 -right-2 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-blue-600 text-white shadow-md shadow-blue-600/40 hover:bg-blue-700 hover:scale-110 transition-all duration-300 ring-2 ring-white dark:ring-slate-900">
             <Camera size={14} />
-            <input type="file" className="hidden" accept="image/*" onChange={handlePhotoUpload} disabled={isUploading} />
+            <input ref={photoInputRef} type="file" className="hidden" accept="image/*" onChange={handlePhotoUpload} disabled={isUploading} />
           </label>
         </div>
 
@@ -634,6 +654,16 @@ export default function Profil() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── MODAL RECADRAGE PHOTO ── */}
+      {cropImageSrc && (
+        <ImageCropModal
+          imageSrc={cropImageSrc}
+          fileName={cropFileName}
+          onConfirm={handleCropConfirm}
+          onCancel={handleCropCancel}
+        />
       )}
     </div>
   );
