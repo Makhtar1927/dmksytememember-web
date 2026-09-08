@@ -1,39 +1,48 @@
 import { supabase } from '../lib/supabase';
 
+// Cloudinary config (upload non signé — pas de backend requis)
+const CLOUDINARY_CLOUD_NAME = 'dorfcwv6a';
+const CLOUDINARY_UPLOAD_PRESET = 'dmk_unsigned_preset';
+const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+
 export const uploadMemberPhoto = async (file: File, email: string): Promise<string> => {
   if (file.size > 5 * 1024 * 1024) {
     throw new Error("La taille de l'image ne doit pas dépasser 5Mo.");
   }
 
-  // 1. Essai via Backend API (Cloudinary)
+  // 1. Upload direct vers Cloudinary (sans backend, sans CORS)
   try {
-    const API_URL = import.meta.env.VITE_API_URL || 
-      (typeof window !== 'undefined' && window.location.hostname === 'localhost' 
-        ? 'http://localhost:5000' 
-        : 'https://dmksytemebackend.onrender.com');
-
     const formData = new FormData();
-    formData.append('photo', file);
-    formData.append('email', email);
+    formData.append('file', file);
+    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+    formData.append('folder', 'dmk/profiles');
+    // Tag unique par email pour retrouver/remplacer facilement
+    const safeTag = email.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    formData.append('tags', safeTag);
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
-
-    const response = await fetch(`${API_URL}/api/users/upload-photo`, {
+    const response = await fetch(CLOUDINARY_UPLOAD_URL, {
       method: 'POST',
       body: formData,
-      signal: controller.signal,
     });
-    clearTimeout(timeoutId);
 
     if (response.ok) {
       const data = await response.json();
-      if (data.status === 'success' && data.photo_url) {
-        return data.photo_url;
+      if (data.secure_url) {
+        const photoUrl: string = data.secure_url;
+        // Mettre à jour la DB Supabase avec l'URL Cloudinary
+        await supabase
+          .from('members')
+          .update({ photo_url: photoUrl })
+          .eq('email', email);
+        console.log('Photo uploadée sur Cloudinary:', photoUrl);
+        return photoUrl;
       }
+    } else {
+      const errData = await response.json().catch(() => ({}));
+      console.warn('Cloudinary upload échoué:', errData);
     }
-  } catch (backendErr) {
-    console.warn("API backend indisponible, basculement vers le mode de secours (Supabase Storage / Base64)...", backendErr);
+  } catch (cloudinaryErr) {
+    console.warn('Cloudinary indisponible, basculement vers Supabase Storage...', cloudinaryErr);
   }
 
   // 2. Fallback 1 : Supabase Storage (Bucket 'avatars')
@@ -52,17 +61,16 @@ export const uploadMemberPhoto = async (file: File, email: string): Promise<stri
         .getPublicUrl(filePath);
 
       const photoUrl = publicUrlData.publicUrl;
-      const { error: dbErr } = await supabase
+      await supabase
         .from('members')
         .update({ photo_url: photoUrl })
         .eq('email', email);
 
-      if (!dbErr) {
-        return photoUrl;
-      }
+      console.log('Photo uploadée sur Supabase Storage:', photoUrl);
+      return photoUrl;
     }
   } catch (storageErr) {
-    console.warn("Supabase Storage indisponible, basculement vers Base64...", storageErr);
+    console.warn('Supabase Storage indisponible, basculement vers Base64...', storageErr);
   }
 
   // 3. Fallback 2 : Conversion Base64 direct dans la table members
@@ -78,6 +86,7 @@ export const uploadMemberPhoto = async (file: File, email: string): Promise<stri
           .eq('email', email);
 
         if (dbErr) throw dbErr;
+        console.log('Photo sauvegardée en Base64 dans la DB');
         resolve(base64Url);
       } catch (err) {
         reject(err instanceof Error ? err : new Error("Erreur de sauvegarde de la photo de profil."));
