@@ -80,7 +80,7 @@ export const subscribeToPushNotifications = async (memberId: string) => {
     }
 
     // Récupérer la clé publique VAPID depuis l'environnement ou utiliser la clé valide du projet
-    const publicVapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY || 'BBdXKWVJ4xVIoIn5beeZTUYzthUgAsBdJS8F2bh0OfTM3NqiQlG0QdV9hnOdautrdcjoVbtEQ4BEvRTLSQrioc0';
+    const publicVapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY || 'BF5p0gwKkz9jkb4cW5GAxiRPLuT7uBBBMdHzrD1XAiKsqedj8ayB-DWifwDBMbsZbbMgsXlk5HyYYw-d1ZPyY1A';
 
     // S'inscrire au service de Push du navigateur
     const subscription = await registration.pushManager.subscribe({

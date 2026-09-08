@@ -74,9 +74,37 @@ export async function sendNativeNotification({
   }
 
   if (!Capacitor.isNativePlatform()) {
-    // Fallback navigateur web standard
+    // Web standard & PWA Mobile (Chrome Android, Safari iOS, Desktop)
     if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification(title, { body, icon: '/icon.png' });
+      const showViaServiceWorker = async () => {
+        if ('serviceWorker' in navigator) {
+          try {
+            const reg = await navigator.serviceWorker.ready;
+            await reg.showNotification(title, {
+              body,
+              icon: '/dmk-icon.png',
+              badge: '/dmk-icon.png',
+              vibrate: channelId === 'dmk_treasury' ? [0, 500, 200, 800, 200, 1000] : [200, 100, 200],
+              tag: String(id),
+              data: { id, channelId },
+            } as NotificationOptions);
+            return true;
+          } catch (swErr) {
+            if (import.meta.env.DEV) console.warn('[Notification] ServiceWorker showNotification fallback:', swErr);
+          }
+        }
+        return false;
+      };
+
+      showViaServiceWorker().then((success) => {
+        if (!success) {
+          try {
+            new Notification(title, { body, icon: '/dmk-icon.png' });
+          } catch (e) {
+            if (import.meta.env.DEV) console.warn('[Notification] Direct Notification constructor unsupported:', e);
+          }
+        }
+      });
     }
     return;
   }
@@ -155,12 +183,11 @@ export async function scheduleEventReminderNotification({
       const delayMs = reminderTime.getTime() - now.getTime();
       if (delayMs > 0 && delayMs < 24 * 60 * 60 * 1000) {
         setTimeout(() => {
-          if ('Notification' in window && Notification.permission === 'granted') {
-            new Notification(`⏰ Rappel Réunion dans 1h : ${title}`, {
-              body: `Votre événement commence dans 1 heure !`,
-              icon: '/icon.png'
-            });
-          }
+          sendNativeNotification({
+            title: `⏰ Rappel Réunion dans 1h : ${title}`,
+            body: `Votre événement commence dans 1 heure !`,
+            channelId: 'dmk_alerts',
+          });
         }, delayMs);
       }
     }
