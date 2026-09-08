@@ -4,11 +4,14 @@ import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Bell, Mail, MessageSquare, Smartphone, CheckCheck, Clock, X, Trash2 } from 'lucide-react';
 import { useNotifications } from '../lib/useNotifications';
+import type { CommunicationItem } from '../lib/NotificationContextDef';
+
+type EnhancedItem = CommunicationItem & { isRead: boolean };
 
 export default function Notifications() {
   const { notifications, loading, readIds, markAsRead, markAllAsRead, deleteMessage } = useNotifications();
   const [activeFilter, setActiveFilter] = useState('Toutes');
-  const [selectedMessage, setSelectedMessage] = useState<any>(null);
+  const [selectedMessage, setSelectedMessage] = useState<EnhancedItem | null>(null);
 
   const enhancedNotifications = notifications.map(n => ({
     ...n,
@@ -34,7 +37,7 @@ export default function Notifications() {
     }
   };
 
-  const handlePressMessage = (item: any) => {
+  const handlePressMessage = (item: EnhancedItem) => {
     markAsRead(item.id.toString());
     setSelectedMessage(item);
   };
@@ -133,12 +136,7 @@ export default function Notifications() {
                         {item.content}
                       </p>
 
-                      <div className="flex items-center justify-between">
-                        <span className={`inline-block rounded-[10px] px-3 py-1.5 text-[11px] font-black uppercase tracking-wider shadow-sm transition-colors ${
-                          item.isRead ? 'bg-slate-100/50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400' : `${bg.replace('-100', '-100/80 dark:bg-opacity-20')} ${color}`
-                        }`}>
-                          {item.type}
-                        </span>
+                      <div className="flex items-center justify-end">
                         <span className="text-xs font-black text-blue-600 dark:text-blue-400 group-hover:text-blue-700 dark:group-hover:text-blue-300 transition-colors">Lire la suite</span>
                       </div>
                     </div>
@@ -158,10 +156,7 @@ export default function Notifications() {
           <div 
             className="w-full sm:max-w-xl max-h-[90vh] bg-white/90 dark:bg-slate-900/90 border border-white/20 dark:border-slate-700/50 rounded-t-[32px] sm:rounded-[32px] shadow-2xl shadow-black/20 flex flex-col overflow-hidden animate-in slide-in-from-bottom-10 sm:slide-in-from-bottom-4 duration-300"
           >
-            <div className="flex items-center justify-between border-b border-slate-200/50 dark:border-slate-800/50 p-6 md:p-8 pb-4">
-              <span className="rounded-[12px] bg-slate-100/80 dark:bg-slate-800/80 px-4 py-2 text-xs font-black uppercase tracking-wide text-slate-600 dark:text-slate-300 shadow-sm transition-colors">
-                {selectedMessage.type}
-              </span>
+            <div className="flex items-center justify-end border-b border-slate-200/50 dark:border-slate-800/50 p-6 md:p-8 pb-4">
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => {
