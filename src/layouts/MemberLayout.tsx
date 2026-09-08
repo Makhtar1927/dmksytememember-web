@@ -1,5 +1,5 @@
 import { type FC, useState, useEffect } from 'react';
-import { Outlet, NavLink } from 'react-router-dom';
+import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Home, Calendar, Bell, Map, DollarSign, TrendingUp, Wallet, Moon, Sun, ListChecks, User, LogOut, IdCard } from 'lucide-react';
 import { NotificationProvider } from '../lib/NotificationContext';
@@ -11,12 +11,15 @@ import MemberCardModal from '../components/MemberCardModal';
 const LayoutContent: FC = () => {
   const { userRole } = useAuth();
   const { unreadCount } = useNotifications();
+  const location = useLocation();
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const savedTheme = localStorage.getItem('theme');
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     return savedTheme === 'dark' || (!savedTheme && prefersDark);
   });
   const [isCardOpen, setIsCardOpen] = useState(false);
+  const [eventsBadge, setEventsBadge] = useState(0);
+  const [transactionsBadge, setTransactionsBadge] = useState(0);
 
   // Apply theme class
   useEffect(() => {
@@ -26,6 +29,37 @@ const LayoutContent: FC = () => {
       document.documentElement.classList.remove('dark');
     }
   }, [isDarkMode]);
+
+  // Chargement des badges nav au montage
+  useEffect(() => {
+    const fetchBadges = async () => {
+      try {
+        const lastWeek = new Date();
+        lastWeek.setDate(lastWeek.getDate() - 7);
+        const { count: evtCount } = await supabase
+          .from('events')
+          .select('*', { count: 'exact', head: true })
+          .gte('created_at', lastWeek.toISOString())
+          .gte('event_date', new Date().toISOString());
+        if (evtCount && evtCount > 0) setEventsBadge(evtCount);
+
+        const { count: txCount } = await supabase
+          .from('sass_contributions')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'En attente');
+        if (txCount && txCount > 0) setTransactionsBadge(txCount);
+      } catch (err) {
+        console.warn('Erreur chargement badges nav:', err);
+      }
+    };
+    void fetchBadges();
+  }, []);
+
+  // Effacement du badge quand on visite la section
+  useEffect(() => {
+    if (location.pathname === '/events') setEventsBadge(0);
+    if (location.pathname === '/transactions') setTransactionsBadge(0);
+  }, [location.pathname]);
 
   const toggleTheme = () => {
     setIsDarkMode((prev) => {
@@ -58,13 +92,13 @@ const LayoutContent: FC = () => {
   ].includes(roleStr);
 
   const tabs = [
-    { name: 'Accueil', to: '/', icon: Home, show: true },
-    { name: 'Événements', to: '/events', icon: Calendar, show: true },
-    { name: 'Secteur', to: '/secteur', icon: Map, show: showSecteur },
-    { name: 'Cotiser', to: '/cotiser', icon: Wallet, show: true },
-    { name: 'Finances', to: '/finances', icon: DollarSign, show: showFinances },
-    { name: 'Transactions', to: '/transactions', icon: ListChecks, show: showFinances },
-    { name: 'Stats', to: '/stats', icon: TrendingUp, show: showStats },
+    { name: 'Accueil', to: '/', icon: Home, show: true, badge: 0 },
+    { name: 'Événements', to: '/events', icon: Calendar, show: true, badge: eventsBadge },
+    { name: 'Secteur', to: '/secteur', icon: Map, show: showSecteur, badge: 0 },
+    { name: 'Cotiser', to: '/cotiser', icon: Wallet, show: true, badge: 0 },
+    { name: 'Finances', to: '/finances', icon: DollarSign, show: showFinances, badge: 0 },
+    { name: 'Transactions', to: '/transactions', icon: ListChecks, show: showFinances, badge: transactionsBadge },
+    { name: 'Stats', to: '/stats', icon: TrendingUp, show: showStats, badge: 0 },
   ];
 
   const visibleTabs = tabs.filter((tab) => tab.show);
@@ -161,6 +195,11 @@ const LayoutContent: FC = () => {
                     <>
                       <tab.icon className={`mr-3 h-5 w-5 flex-shrink-0 transition-colors ${isActive ? 'text-white' : ''}`} />
                       {tab.name}
+                      {tab.badge > 0 && (
+                        <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[9px] font-black text-white shadow-sm ring-1 ring-white/20">
+                          {tab.badge > 99 ? '99+' : tab.badge}
+                        </span>
+                      )}
                     </>
                   )}
                 </NavLink>
@@ -244,6 +283,11 @@ const LayoutContent: FC = () => {
                     )}
                     <div className="relative mt-1">
                       <tab.icon className={`h-6 w-6 transition-all duration-300 ${isActive ? 'text-blue-600 dark:text-blue-400 drop-shadow-sm scale-110' : 'text-slate-500 dark:text-slate-400'}`} />
+                      {tab.badge > 0 && (
+                        <span className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[8px] font-black text-white ring-2 ring-white dark:ring-slate-900 shadow-sm">
+                          {tab.badge > 9 ? '9+' : tab.badge}
+                        </span>
+                      )}
                     </div>
                     <span className="text-[10px] font-bold truncate w-full text-center px-1">
                       {tab.name}
