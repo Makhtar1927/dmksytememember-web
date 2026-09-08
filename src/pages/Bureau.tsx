@@ -297,13 +297,19 @@ export default function Bureau() {
         .select('member_email')
         .eq('meeting_id', meeting.id.toString());
 
+      const mapParticipant = (m: any): MeetingParticipant => ({
+        ...m,
+        full_name: `${m.first_name || ''} ${m.last_name || ''}`.trim() || m.email,
+        avatar_url: m.photo_url || ''
+      });
+
       if (att && att.length > 0) {
         const emails = att.map((a: { member_email: string }) => a.member_email);
         const { data: attendeeProfiles } = await supabase
           .from('members')
-          .select('id, full_name, email, role, avatar_url')
+          .select('id, first_name, last_name, email, role, photo_url')
           .in('email', emails);
-        if (attendeeProfiles) setConfirmedAttendees(attendeeProfiles as MeetingParticipant[]);
+        if (attendeeProfiles) setConfirmedAttendees(attendeeProfiles.map(mapParticipant));
       }
 
       // 3. Suivi en direct (meeting_viewers si la table existe)
@@ -317,9 +323,9 @@ export default function Bureau() {
         const vEmails = viewers.map((v: { member_email: string }) => v.member_email);
         const { data: viewerProfiles } = await supabase
           .from('members')
-          .select('id, full_name, email, role, avatar_url')
+          .select('id, first_name, last_name, email, role, photo_url')
           .in('email', vEmails);
-        if (viewerProfiles) setLiveViewers(viewerProfiles as MeetingParticipant[]);
+        if (viewerProfiles) setLiveViewers(viewerProfiles.map(mapParticipant));
       }
     } catch (err) {
       console.warn("Erreur chargement gestion réunion:", err);
