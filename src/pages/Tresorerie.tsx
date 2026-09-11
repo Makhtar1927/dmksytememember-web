@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { DollarSign, ArrowDownRight, ArrowUpRight, CheckCircle, X, PlusCircle, FileText, CalendarDays, Calendar as CalendarIcon, Moon, Star, Sparkles } from 'lucide-react';
 
@@ -131,25 +131,29 @@ export default function Tresorerie() {
     }
   }, []);
 
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     void Promise.resolve().then(() => {
       fetchTreasuryData();
     });
 
+    const triggerRefresh = () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = setTimeout(() => {
+        void fetchTreasuryData(true);
+      }, 300);
+    };
+
     // S'abonner aux changements en temps réel
     const channel = supabase.channel('treasury_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'treasury_incomes' }, () => {
-        fetchTreasuryData(true);
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'treasury_expenses' }, () => {
-        fetchTreasuryData(true);
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sass_contributions' }, () => {
-        fetchTreasuryData(true);
-      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'treasury_incomes' }, triggerRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'treasury_expenses' }, triggerRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sass_contributions' }, triggerRefresh)
       .subscribe();
 
     return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
       supabase.removeChannel(channel);
     };
   }, [fetchTreasuryData]);

@@ -62,15 +62,23 @@ export async function sendNativeNotification({
   channelId?: 'dmk_alerts' | 'dmk_treasury';
   id?: number;
 }) {
-  // Vibration haptique immédiate si l'appareil est actif
+  // Vibration haptique immédiate uniquement sur mobile natif ou si l'utilisateur a déjà interagi sur le web
   try {
-    if (channelId === 'dmk_treasury') {
-      await Haptics.vibrate({ duration: 800 });
-    } else {
-      await Haptics.notification({ type: NotificationType.Success });
+    if (Capacitor.isNativePlatform()) {
+      if (channelId === 'dmk_treasury') {
+        await Haptics.vibrate({ duration: 800 });
+      } else {
+        await Haptics.notification({ type: NotificationType.Success });
+      }
+    } else if (typeof navigator !== 'undefined' && 'vibrate' in navigator && (navigator as any).userActivation?.hasBeenActive) {
+      if (channelId === 'dmk_treasury') {
+        navigator.vibrate([0, 500, 200, 800, 200, 1000]);
+      } else {
+        navigator.vibrate([200, 100, 200]);
+      }
     }
   } catch (e) {
-    // Ignorer si haptique indisponible
+    // Ignorer si haptique indisponible ou bloquée par le navigateur
   }
 
   if (!Capacitor.isNativePlatform()) {

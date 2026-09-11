@@ -96,17 +96,25 @@ export default function Transactions() {
 
     fetchTransactions();
 
+    const debounceTimerRef = { current: null as ReturnType<typeof setTimeout> | null };
+
+    const triggerRefresh = () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = setTimeout(() => {
+        void fetchTransactions(true);
+      }, 300);
+    };
+
     const channel = supabase
       .channel('member_transactions_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sass_contributions' }, () => {
-        fetchTransactions(true);
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'members' }, () => {
-        fetchTransactions(true);
-      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sass_contributions' }, triggerRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'members' }, triggerRefresh)
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const handleAction = async (id: string, action: 'Validé' | 'Annulé') => {

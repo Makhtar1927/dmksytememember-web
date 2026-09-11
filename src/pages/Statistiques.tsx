@@ -183,15 +183,25 @@ export default function Statistiques() {
       fetchGlobalData();
     });
 
+    const debounceTimerRef = { current: null as ReturnType<typeof setTimeout> | null };
+
+    const triggerRefresh = () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = setTimeout(() => {
+        void fetchGlobalData(true);
+      }, 300);
+    };
+
     // S'abonner aux changements en temps réel
     const channel = supabase.channel('stats_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'treasury_incomes' }, () => fetchGlobalData(true))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'treasury_expenses' }, () => fetchGlobalData(true))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sass_contributions' }, () => fetchGlobalData(true))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'members' }, () => fetchGlobalData(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'treasury_incomes' }, triggerRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'treasury_expenses' }, triggerRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sass_contributions' }, triggerRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'members' }, triggerRefresh)
       .subscribe();
 
     return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
       supabase.removeChannel(channel);
     };
   }, [fetchGlobalData]);

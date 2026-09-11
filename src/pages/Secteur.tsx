@@ -133,13 +133,25 @@ export default function Secteur() {
       fetchSectorData();
     });
 
+    const debounceTimerRef = { current: null as ReturnType<typeof setTimeout> | null };
+
+    const triggerRefresh = () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = setTimeout(() => {
+        void fetchSectorData(true);
+      }, 300);
+    };
+
     const channel = supabase
       .channel('secteur_member_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'members' }, () => fetchSectorData(true))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sass_contributions' }, () => fetchSectorData(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'members' }, triggerRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sass_contributions' }, triggerRefresh)
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      supabase.removeChannel(channel);
+    };
   }, [fetchSectorData]);
 
   useEffect(() => {

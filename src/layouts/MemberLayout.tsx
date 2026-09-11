@@ -146,7 +146,7 @@ const LayoutContent: FC = () => {
           >
             <Bell size={20} />
             {unreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-black text-white shadow-sm ring-2 ring-white dark:ring-slate-900">
+              <span key="mobile-bell-badge" className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-black text-white shadow-sm ring-2 ring-white dark:ring-slate-900">
                 {unreadCount}
               </span>
             )}
@@ -196,7 +196,7 @@ const LayoutContent: FC = () => {
                       <tab.icon className={`mr-3 h-5 w-5 flex-shrink-0 transition-colors ${isActive ? 'text-white' : ''}`} />
                       {tab.name}
                       {tab.badge > 0 && (
-                        <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[9px] font-black text-white shadow-sm ring-1 ring-white/20">
+                        <span key={`sidebar-badge-${tab.name}`} className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[9px] font-black text-white shadow-sm ring-1 ring-white/20">
                           {tab.badge > 99 ? '99+' : tab.badge}
                         </span>
                       )}
@@ -236,7 +236,7 @@ const LayoutContent: FC = () => {
           >
             <Bell size={20} />
             {unreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-black text-white shadow-sm ring-2 ring-white dark:ring-slate-900">
+              <span key="desktop-bell-badge" className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-black text-white shadow-sm ring-2 ring-white dark:ring-slate-900">
                 {unreadCount}
               </span>
             )}
@@ -284,7 +284,7 @@ const LayoutContent: FC = () => {
                     <div className="relative mt-1">
                       <tab.icon className={`h-6 w-6 transition-all duration-300 ${isActive ? 'text-blue-600 dark:text-blue-400 drop-shadow-sm scale-110' : 'text-slate-500 dark:text-slate-400'}`} />
                       {tab.badge > 0 && (
-                        <span className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[8px] font-black text-white ring-2 ring-white dark:ring-slate-900 shadow-sm">
+                        <span key={`mobile-nav-badge-${tab.name}`} className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[8px] font-black text-white ring-2 ring-white dark:ring-slate-900 shadow-sm">
                           {tab.badge > 9 ? '9+' : tab.badge}
                         </span>
                       )}

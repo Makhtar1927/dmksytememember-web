@@ -159,18 +159,26 @@ export default function Dashboard() {
       fetchUserData();
     });
 
+    const debounceTimerRef = { current: null as ReturnType<typeof setTimeout> | null };
+
+    const triggerRefresh = () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = setTimeout(() => {
+        void fetchUserData(true);
+        void fetchMonthlyReport(reportMonth);
+      }, 300);
+    };
+
     const channel = supabase
       .channel('member_dashboard_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'members' }, () => {
-        fetchUserData(true);
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sass_contributions' }, () => {
-        fetchUserData(true);
-        fetchMonthlyReport(reportMonth);
-      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'members' }, triggerRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sass_contributions' }, triggerRefresh)
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      supabase.removeChannel(channel);
+    };
   }, [fetchUserData, fetchMonthlyReport, reportMonth]);
 
   useEffect(() => {
