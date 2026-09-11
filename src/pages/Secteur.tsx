@@ -58,8 +58,9 @@ export default function Secteur() {
   const [selectedReminders, setSelectedReminders] = useState<string[]>([]);
   const [isSendingReminders, setIsSendingReminders] = useState(false);
 
-  const fetchSectorData = useCallback(async () => {
+  const fetchSectorData = useCallback(async (silent = false) => {
     await Promise.resolve();
+    if (!silent) setLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user?.email) return;
@@ -123,17 +124,19 @@ export default function Secteur() {
     } catch (error) {
       console.error("Erreur chargement données secteur:", error);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchSectorData();
+    void Promise.resolve().then(() => {
+      fetchSectorData();
+    });
 
     const channel = supabase
       .channel('secteur_member_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'members' }, () => fetchSectorData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sass_contributions' }, () => fetchSectorData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'members' }, () => fetchSectorData(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sass_contributions' }, () => fetchSectorData(true))
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };

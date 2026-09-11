@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { DollarSign, ArrowDownRight, ArrowUpRight, CheckCircle, X, PlusCircle, FileText, CalendarDays, Calendar as CalendarIcon, Moon, Star, Sparkles } from 'lucide-react';
 
@@ -12,6 +12,21 @@ const INCOME_SOURCES = [
   'Barkelou', 'Bénéfices Projets/Événements', 'Dons Anonymes', 'Apport Extérieur', 'Autre'
 ];
 
+interface MemberPreview {
+  first_name: string;
+  last_name: string;
+  sector?: string;
+}
+
+interface MixedTransaction {
+  id: string;
+  type: 'income' | 'expense';
+  amount: number;
+  date: Date;
+  title: string;
+  subtitle: string;
+}
+
 export default function Tresorerie() {
   const [loading, setLoading] = useState(true);
   
@@ -21,7 +36,7 @@ export default function Tresorerie() {
   const [monthExpenses, setMonthExpenses] = useState(0);
   
   // Data
-  const [mixedTransactions, setMixedTransactions] = useState<any[]>([]);
+  const [mixedTransactions, setMixedTransactions] = useState<MixedTransaction[]>([]);
 
   // Modal State - Décaissement
   const [isExpenseModalVisible, setExpenseModalVisible] = useState(false);
@@ -41,40 +56,8 @@ export default function Tresorerie() {
   const [isReportModalVisible, setReportModalVisible] = useState(false);
   const [reportType, setReportType] = useState<'hebdo'|'mensuel'|'Magal'|'Gamou'|'Ziaar'>('hebdo');
 
-  useEffect(() => {
-    fetchTreasuryData();
-
-    // S'abonner aux changements en temps réel
-    const channel = supabase.channel('treasury_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'treasury_incomes' }, () => {
-        fetchTreasuryData();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'treasury_expenses' }, () => {
-        fetchTreasuryData();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sass_contributions' }, () => {
-        fetchTreasuryData();
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (isIncomeModalVisible || isExpenseModalVisible || isReportModalVisible) {
-      document.body.classList.add('hide-bottom-nav');
-    } else {
-      document.body.classList.remove('hide-bottom-nav');
-    }
-    return () => {
-      document.body.classList.remove('hide-bottom-nav');
-    };
-  }, [isIncomeModalVisible, isExpenseModalVisible, isReportModalVisible]);
-
-  const fetchTreasuryData = async () => {
-    setLoading(true);
+  const fetchTreasuryData = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const currentMonth = new Date().getMonth();
       const currentYear = new Date().getFullYear();
@@ -85,8 +68,7 @@ export default function Tresorerie() {
       });
 
       if (rpcError) {
-        console.error("Erreur RPC:", rpcError);
-        window.alert("Attention: Impossible de charger les totaux.");
+        console.warn("Avertissement RPC get_treasury_summary:", rpcError);
       } else if (summary) {
         setTotalBalance(summary.total_balance || 0);
         setMonthEntries(summary.total_incomes || 0);
@@ -97,17 +79,18 @@ export default function Tresorerie() {
       const { data: expenses } = await supabase.from('treasury_expenses').select('*').order('expense_date', { ascending: false }).limit(15);
       const { data: incomes } = await supabase.from('treasury_incomes').select('*').order('income_date', { ascending: false }).limit(15);
 
-      const history: any[] = [];
+      const history: MixedTransaction[] = [];
       
       if (contribs) {
         contribs.forEach(c => {
+          const mem = c.members as unknown as MemberPreview | null;
           history.push({
             id: 'sass_' + c.id,
             type: 'income',
             amount: c.amount,
             date: new Date(c.payment_date),
-            title: c.members ? `${(c.members as any).first_name} ${(c.members as any).last_name}` : 'Membre Inconnu',
-            subtitle: `Cotisation Sass • ${(c.members as any)?.sector || ''}`
+            title: mem ? `${mem.first_name} ${mem.last_name}` : 'Membre Inconnu',
+            subtitle: `Cotisation Sass • ${mem?.sector || ''}`
           });
         });
       }
@@ -144,9 +127,43 @@ export default function Tresorerie() {
     } catch (error) {
       console.error("Erreur Trésorerie:", error);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void Promise.resolve().then(() => {
+      fetchTreasuryData();
+    });
+
+    // S'abonner aux changements en temps réel
+    const channel = supabase.channel('treasury_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'treasury_incomes' }, () => {
+        fetchTreasuryData(true);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'treasury_expenses' }, () => {
+        fetchTreasuryData(true);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sass_contributions' }, () => {
+        fetchTreasuryData(true);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchTreasuryData]);
+
+  useEffect(() => {
+    if (isIncomeModalVisible || isExpenseModalVisible || isReportModalVisible) {
+      document.body.classList.add('hide-bottom-nav');
+    } else {
+      document.body.classList.remove('hide-bottom-nav');
+    }
+    return () => {
+      document.body.classList.remove('hide-bottom-nav');
+    };
+  }, [isIncomeModalVisible, isExpenseModalVisible, isReportModalVisible]);
 
   const handleProcessExpense = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -179,6 +196,7 @@ export default function Tresorerie() {
       setExpenseBeneficiary(''); 
       setExpenseReason(EXPENSE_REASONS[0]);
     } catch (error) { 
+      console.error("Erreur décaissement:", error);
       window.alert("Erreur décaissement."); 
     } finally { 
       setIsSubmitting(false); 
@@ -214,6 +232,7 @@ export default function Tresorerie() {
       setIncomeDesc(''); 
       setIncomeSource(INCOME_SOURCES[0]);
     } catch (error) { 
+      console.error("Erreur encaissement:", error);
       window.alert("Erreur encaissement."); 
     } finally { 
       setIsIncomeSubmitting(false); 
@@ -328,7 +347,8 @@ export default function Tresorerie() {
         const sectorsTotal: Record<string, number> = {};
         let totalSass = 0;
         safeContribs.forEach(c => {
-          const sec = (c.members as any)?.sector || 'Inconnu';
+          const mem = c.members as unknown as MemberPreview | null;
+          const sec = mem?.sector || 'Inconnu';
           sectorsTotal[sec] = (sectorsTotal[sec] || 0) + c.amount;
           totalSass += c.amount;
         });

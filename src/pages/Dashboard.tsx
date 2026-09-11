@@ -62,8 +62,9 @@ export default function Dashboard() {
     topRubricAmount: number;
   } | null>(null);
 
-  const fetchUserData = useCallback(async () => {
+  const fetchUserData = useCallback(async (silent = false) => {
     try {
+      if (!silent) setLoading(true);
       if (user?.email) {
         const { data: member } = await supabase
           .from('members')
@@ -92,7 +93,7 @@ export default function Dashboard() {
     } catch (error) {
       console.error("Erreur de récupération des données:", error);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [user]);
 
@@ -154,15 +155,17 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    Promise.resolve().then(() => {
+    void Promise.resolve().then(() => {
       fetchUserData();
     });
 
     const channel = supabase
       .channel('member_dashboard_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'members' }, () => fetchUserData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'members' }, () => {
+        fetchUserData(true);
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sass_contributions' }, () => {
-        fetchUserData();
+        fetchUserData(true);
         fetchMonthlyReport(reportMonth);
       })
       .subscribe();
@@ -171,30 +174,10 @@ export default function Dashboard() {
   }, [fetchUserData, fetchMonthlyReport, reportMonth]);
 
   useEffect(() => {
-    Promise.resolve().then(() => {
+    void Promise.resolve().then(() => {
       fetchMonthlyReport(reportMonth);
     });
   }, [reportMonth, fetchMonthlyReport]);
-
-  useEffect(() => {
-    if (!memberInfo?.id) return;
-
-    const channel = supabase
-      .channel('custom-all-channel')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'sass_contributions', filter: `member_id=eq.${memberInfo.id}` },
-        (payload) => {
-          console.log('Changement détecté en temps réel:', payload);
-          fetchUserData();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [memberInfo?.id, fetchUserData]);
 
   const stats = useMemo(() => {
     if (!memberInfo) return null;

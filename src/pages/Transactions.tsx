@@ -31,8 +31,8 @@ export default function Transactions() {
   const [processingId, setProcessingId] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchTransactions = async () => {
-      setLoading(true);
+    const fetchTransactions = async (silent = false) => {
+      if (!silent) setLoading(true);
       try {
         const { data, error } = await supabase
           .from('sass_contributions')
@@ -48,7 +48,7 @@ export default function Transactions() {
 
         if (error) {
           console.error("Erreur avec la jointure:", error);
-          fallbackFetchTransactions();
+          await fallbackFetchTransactions();
           return;
         }
         
@@ -56,7 +56,7 @@ export default function Transactions() {
       } catch (error) {
         console.error("Erreur fetchTransactions:", error);
       } finally {
-        setLoading(false);
+        if (!silent) setLoading(false);
       }
     };
 
@@ -98,8 +98,12 @@ export default function Transactions() {
 
     const channel = supabase
       .channel('member_transactions_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sass_contributions' }, () => fetchTransactions())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'members' }, () => fetchTransactions())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sass_contributions' }, () => {
+        fetchTransactions(true);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'members' }, () => {
+        fetchTransactions(true);
+      })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };

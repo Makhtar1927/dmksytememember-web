@@ -31,7 +31,7 @@ interface MemberLight {
   sass_cahier?: number;
   sass_projets?: number;
   sass_autres?: number;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 interface ContribItem {
@@ -105,9 +105,9 @@ export default function Statistiques() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const fetchGlobalData = useCallback(async () => {
+  const fetchGlobalData = useCallback(async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const currentYear = new Date().getFullYear();
 
       const { data: dashboardStats, error: rpcError } = await supabase.rpc('get_statistics_dashboard', {
@@ -118,8 +118,7 @@ export default function Statistiques() {
       });
 
       if (rpcError) {
-        console.error("Erreur RPC:", rpcError);
-        window.alert("Attention: Impossible de charger les stats.");
+        console.warn("Avertissement RPC get_statistics_dashboard:", rpcError);
         return;
       }
 
@@ -175,19 +174,21 @@ export default function Statistiques() {
     } catch (error) {
       console.error("Erreur chargement stats:", error);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [selectedMonth, selectedSector, selectedSass, selectedMemberId]);
 
   useEffect(() => {
-    fetchGlobalData();
+    void Promise.resolve().then(() => {
+      fetchGlobalData();
+    });
 
     // S'abonner aux changements en temps réel
     const channel = supabase.channel('stats_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'treasury_incomes' }, () => fetchGlobalData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'treasury_expenses' }, () => fetchGlobalData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sass_contributions' }, () => fetchGlobalData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'members' }, () => fetchGlobalData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'treasury_incomes' }, () => fetchGlobalData(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'treasury_expenses' }, () => fetchGlobalData(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sass_contributions' }, () => fetchGlobalData(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'members' }, () => fetchGlobalData(true))
       .subscribe();
 
     return () => {
@@ -197,7 +198,7 @@ export default function Statistiques() {
 
   const searchSuggestions = useMemo(() => {
     if (!searchMember || !showSearchDropdown) return [];
-    return allMembersLight.filter((m: any) => {
+    return allMembersLight.filter((m: MemberLight) => {
       const fullName = `${m.first_name} ${m.last_name}`.toLowerCase();
       return fullName.includes(searchMember.toLowerCase());
     }).slice(0, 5);
@@ -368,7 +369,7 @@ export default function Statistiques() {
             <div className="flex flex-wrap gap-2 mb-8">
               {SASS_TYPES.map(type => {
                 const key = 'sass_' + (type === 'Magal/Gamou' ? 'magal' : type === 'Keur Serigne Touba' ? 'kst' : type === 'Cahier Serigne Mountakha' ? 'cahier' : type.toLowerCase());
-                const amount = stats.singleMember ? stats.singleMember[key] || 0 : 0;
+                const amount = Number(stats.singleMember ? stats.singleMember[key] || 0 : 0);
                 if (amount === 0) return null;
                 return (
                   <div key={type} className="rounded-[12px] bg-emerald-100/80 dark:bg-emerald-500/20 px-4 py-2 text-sm font-black text-emerald-800 dark:text-emerald-300 border border-emerald-200/50 dark:border-emerald-500/30 shadow-sm transition-colors">
@@ -383,7 +384,7 @@ export default function Statistiques() {
               {stats.filteredContribs.length === 0 ? (
                 <div className="p-6 text-center text-sm font-bold text-slate-500 dark:text-slate-400 transition-colors">Aucune cotisation enregistrée pour ce mois.</div>
               ) : (
-                stats.filteredContribs.map((c: any) => (
+                stats.filteredContribs.map((c: ContribItem) => (
                   <div key={c.id} className="flex justify-between items-center p-4 px-6 hover:bg-emerald-50/50 dark:hover:bg-emerald-900/20 transition-colors">
                     <span className="text-sm font-bold text-slate-700 dark:text-slate-300 transition-colors">{new Date(c.payment_date).toLocaleDateString()} - {c.sass_type}</span>
                     <span className="text-base font-black text-emerald-600 dark:text-emerald-400 transition-colors">+{c.amount.toLocaleString('fr-FR')} F</span>
@@ -436,7 +437,7 @@ export default function Statistiques() {
                 <div className="p-6 text-center text-sm font-bold text-slate-500 dark:text-slate-400 transition-colors">Aucune donnée d'objectif pour ce mois.</div>
               ) : (
                 <div className="space-y-6">
-                  {stats.sectorPerformance.map((sector: any, i: number) => {
+                  {stats.sectorPerformance.map((sector: SectorPerf, i: number) => {
                     let barColor = 'bg-rose-500 dark:bg-rose-500 shadow-rose-500/50';
                     let textColor = 'text-rose-600 dark:text-rose-400';
                     if (sector.percent >= 80) { barColor = 'bg-emerald-500 dark:bg-emerald-500 shadow-emerald-500/50'; textColor = 'text-emerald-600 dark:text-emerald-400'; }
@@ -469,8 +470,8 @@ export default function Statistiques() {
                 <div className="p-6 text-center text-sm font-bold text-slate-500 dark:text-slate-400 transition-colors">Aucun membre trouvé.</div>
               ) : (
                 <div className="space-y-6">
-                  {stats.filteredMembers.map((m: any) => {
-                    const amountPaid = stats.filteredContribs.filter((c: any) => c.member_id === m.id).reduce((s: any, c: any) => s + c.amount, 0);
+                  {stats.filteredMembers.map((m: MemberLight) => {
+                    const amountPaid = stats.filteredContribs.filter((c: ContribItem) => c.member_id === m.id).reduce((s: number, c: ContribItem) => s + c.amount, 0);
                     const goal = (m.sass_magal||0) + (m.sass_ziaar||0) + (m.sass_kst||0) + (m.sass_cahier||0) + (m.sass_projets||0) + (m.sass_autres||0);
                     const pct = goal > 0 ? Math.round((amountPaid / goal) * 100) : 0;
                     
