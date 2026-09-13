@@ -15,8 +15,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 // ─────────────────────────────────────────────────────────────
 if (typeof Node === 'function' && Node.prototype) {
   const _insertBefore = Node.prototype.insertBefore;
-  // @ts-expect-error – on remplace la méthode native avec un cast manuel
-  Node.prototype.insertBefore = function (newNode: Node, refNode: Node | null) {
+  (Node.prototype as any).insertBefore = function (newNode: Node, refNode: Node | null) {
     // Si le nœud de référence n'appartient plus à ce parent (DOM muté
     // par une extension externe), on tente quand même l'insertion et
     // on absorbe l'erreur plutôt que de laisser React crasher.
@@ -37,8 +36,7 @@ if (typeof Node === 'function' && Node.prototype) {
   };
 
   const _removeChild = Node.prototype.removeChild;
-  // @ts-expect-error – idem
-  Node.prototype.removeChild = function (child: Node) {
+  (Node.prototype as any).removeChild = function (child: Node) {
     if (child.parentNode !== this) {
       console.warn('[DOM Shield] removeChild absorbé (nœud orphelin)');
       return child;
