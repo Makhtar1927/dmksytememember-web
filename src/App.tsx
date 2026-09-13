@@ -1,8 +1,9 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { MemberLayout } from './layouts/MemberLayout';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Code splitting / Lazy loading des pages pour des performances maximales
 const Login = lazy(() => import('./pages/Login'));
@@ -27,33 +28,42 @@ function PageLoader() {
   );
 }
 
+// Wrapper qui combine ErrorBoundary + Suspense pour chaque page
+function PageWrapper({ children }: { children: ReactNode }) {
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={<PageLoader />}>
+        {children}
+      </Suspense>
+    </ErrorBoundary>
+  );
+}
+
 function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
-        <Suspense fallback={<PageLoader />}>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-            
-            <Route element={<ProtectedRoute />}>
-              <Route element={<MemberLayout />}>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/profil" element={<Profil />} />
-                <Route path="/events" element={<Events />} />
-                <Route path="/notifications" element={<Notifications />} />
-                <Route path="/bureau" element={<Bureau />} />
-                <Route path="/secteur" element={<Secteur />} />
-                <Route path="/cotiser" element={<Cotiser />} />
-                <Route path="/finances" element={<Tresorerie />} />
-                <Route path="/transactions" element={<Transactions />} />
-                <Route path="/stats" element={<Statistiques />} />
-              </Route>
+        <Routes>
+          <Route path="/login" element={<PageWrapper><Login /></PageWrapper>} />
+          <Route path="/register" element={<PageWrapper><Register /></PageWrapper>} />
+          
+          <Route element={<ProtectedRoute />}>
+            <Route element={<MemberLayout />}>
+              <Route path="/" element={<PageWrapper><Dashboard /></PageWrapper>} />
+              <Route path="/profil" element={<PageWrapper><Profil /></PageWrapper>} />
+              <Route path="/events" element={<PageWrapper><Events /></PageWrapper>} />
+              <Route path="/notifications" element={<PageWrapper><Notifications /></PageWrapper>} />
+              <Route path="/bureau" element={<PageWrapper><Bureau /></PageWrapper>} />
+              <Route path="/secteur" element={<PageWrapper><Secteur /></PageWrapper>} />
+              <Route path="/cotiser" element={<PageWrapper><Cotiser /></PageWrapper>} />
+              <Route path="/finances" element={<PageWrapper><Tresorerie /></PageWrapper>} />
+              <Route path="/transactions" element={<PageWrapper><Transactions /></PageWrapper>} />
+              <Route path="/stats" element={<PageWrapper><Statistiques /></PageWrapper>} />
             </Route>
+          </Route>
 
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </Suspense>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </BrowserRouter>
     </AuthProvider>
   );

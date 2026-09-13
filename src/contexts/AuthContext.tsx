@@ -37,32 +37,50 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
   };
 
   const fetchUserRole = async (currentUser: User) => {
-    if (!currentUser?.email) return;
+    if (!currentUser?.email) {
+      setLoading(false);
+      return;
+    }
     if (fetchingEmailRef.current === currentUser.email) return;
     fetchingEmailRef.current = currentUser.email;
+    
+    // Timeout de sécurité : si la requête prend trop de temps, on libère le loading
+    const safetyTimer = setTimeout(() => {
+      setLoading(false);
+    }, 10000);
+    
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('members')
         .select('id, role, status')
         .eq('email', currentUser.email)
-        .single();
+        .maybeSingle(); // maybeSingle ne lève pas d'erreur si aucun résultat
         
-      if (data && data.role) {
+      if (error) {
+        console.error("Erreur récupération rôle membre:", error);
+        return;
+      }
+        
+      if (data) {
         if (data.role === 'Administrateur général') {
           await supabase.auth.signOut();
-          alert("Accès refusé : L'Administrateur Général doit utiliser le tableau de bord Web, pas l'application membre.");
+          // Pas d'alert() bloquant — on redirige via le state
           setUserRole('Membre Simple');
           setMemberId(null);
           setMemberStatus('Inactif');
           return;
         }
-        setUserRole(data.role);
+        setUserRole(data.role || 'Membre Simple');
         setMemberId(data.id);
         setMemberStatus(data.status || 'Actif');
+      } else {
+        // Membre non trouvé dans la table members
+        console.warn('Aucun membre trouvé pour:', currentUser.email);
       }
     } catch (error) {
       console.error("Erreur récupération rôle:", error);
     } finally {
+      clearTimeout(safetyTimer);
       setLoading(false);
     }
   };
