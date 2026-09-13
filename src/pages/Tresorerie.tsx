@@ -62,22 +62,27 @@ export default function Tresorerie() {
       const currentMonth = new Date().getMonth();
       const currentYear = new Date().getFullYear();
 
-      const { data: summary, error: rpcError } = await supabase.rpc('get_treasury_summary', {
-        target_month: currentMonth,
-        target_year: currentYear
-      });
+      const [summaryRes, contribsRes, expensesRes, incomesRes] = await Promise.all([
+        supabase.rpc('get_treasury_summary', {
+          target_month: currentMonth,
+          target_year: currentYear
+        }),
+        supabase.from('sass_contributions').select('id, amount, payment_date, members:member_id(first_name, last_name, sector)').eq('status', 'Validé').order('payment_date', { ascending: false }).limit(15),
+        supabase.from('treasury_expenses').select('*').order('expense_date', { ascending: false }).limit(15),
+        supabase.from('treasury_incomes').select('*').order('income_date', { ascending: false }).limit(15)
+      ]);
 
-      if (rpcError) {
-        console.warn("Avertissement RPC get_treasury_summary:", rpcError);
-      } else if (summary) {
-        setTotalBalance(summary.total_balance || 0);
-        setMonthEntries(summary.total_incomes || 0);
-        setMonthExpenses(summary.total_expenses || 0);
+      if (summaryRes.error) {
+        console.warn("Avertissement RPC get_treasury_summary:", summaryRes.error);
+      } else if (summaryRes.data) {
+        setTotalBalance(summaryRes.data.total_balance || 0);
+        setMonthEntries(summaryRes.data.total_incomes || 0);
+        setMonthExpenses(summaryRes.data.total_expenses || 0);
       }
 
-      const { data: contribs } = await supabase.from('sass_contributions').select('id, amount, payment_date, members:member_id(first_name, last_name, sector)').eq('status', 'Validé').order('payment_date', { ascending: false }).limit(15);
-      const { data: expenses } = await supabase.from('treasury_expenses').select('*').order('expense_date', { ascending: false }).limit(15);
-      const { data: incomes } = await supabase.from('treasury_incomes').select('*').order('income_date', { ascending: false }).limit(15);
+      const contribs = contribsRes.data;
+      const expenses = expensesRes.data;
+      const incomes = incomesRes.data;
 
       const history: MixedTransaction[] = [];
       

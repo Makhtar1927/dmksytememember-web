@@ -10,7 +10,28 @@ export default defineConfig({
     strictPort: true
   },
   build: {
-    sourcemap: false
+    sourcemap: false,
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (id.includes('node_modules')) {
+            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router-dom')) {
+              return 'vendor-react';
+            }
+            if (id.includes('@supabase')) {
+              return 'vendor-supabase';
+            }
+            if (id.includes('lucide-react')) {
+              return 'vendor-icons';
+            }
+            if (id.includes('@capacitor')) {
+              return 'vendor-capacitor';
+            }
+          }
+        }
+      }
+    }
   },
   plugins: [
     tailwindcss(),

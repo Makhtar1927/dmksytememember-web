@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { CheckCircle, XCircle, Clock, Search } from 'lucide-react';
 
@@ -44,7 +44,8 @@ export default function Transactions() {
               sector
             )
           `)
-          .order('payment_date', { ascending: false });
+          .order('payment_date', { ascending: false })
+          .limit(100);
 
         if (error) {
           console.error("Erreur avec la jointure:", error);
@@ -148,16 +149,27 @@ export default function Transactions() {
     }
   };
 
-  const filteredTransactions = transactions.filter(t => {
-    const name = t.members ? `${t.members.first_name} ${t.members.last_name}`.toLowerCase() : '';
-    const matchesSearch = name.includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'Tous' || t.status === statusFilter || (statusFilter === 'Annulé' && t.status === 'Refusé');
-    return matchesSearch && matchesStatus;
-  });
+  const { countPending, countValidated, countCancelled } = useMemo(() => {
+    let pending = 0;
+    let validated = 0;
+    let cancelled = 0;
+    for (const t of transactions) {
+      if (t.status === 'En attente') pending++;
+      else if (t.status === 'Validé') validated++;
+      else if (t.status === 'Annulé' || t.status === 'Refusé') cancelled++;
+    }
+    return { countPending: pending, countValidated: validated, countCancelled: cancelled };
+  }, [transactions]);
 
-  const countPending = transactions.filter(t => t.status === 'En attente').length;
-  const countValidated = transactions.filter(t => t.status === 'Validé').length;
-  const countCancelled = transactions.filter(t => t.status === 'Annulé' || t.status === 'Refusé').length;
+  const filteredTransactions = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return transactions.filter(t => {
+      const name = t.members ? `${t.members.first_name} ${t.members.last_name}`.toLowerCase() : '';
+      const matchesSearch = !query || name.includes(query);
+      const matchesStatus = statusFilter === 'Tous' || t.status === statusFilter || (statusFilter === 'Annulé' && t.status === 'Refusé');
+      return matchesSearch && matchesStatus;
+    });
+  }, [transactions, searchQuery, statusFilter]);
 
   return (
     <div className="flex flex-col relative z-10 pb-40 md:pb-8">

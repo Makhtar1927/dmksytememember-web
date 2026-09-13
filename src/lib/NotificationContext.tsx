@@ -70,9 +70,9 @@ export function NotificationProvider({ children, memberId }: { children: ReactNo
     void fetchCommunications(false);
     void syncUpcomingEventReminders();
 
-    // Écouteur Realtime : Messages / Communications
-    const channelComms = supabase
-      .channel('public:communications')
+    // Écouteur Realtime unifié : Communications + Alerte Trésorerie + Événements sur un SEUL canal
+    const unifiedChannel = supabase
+      .channel(`member_unified_${memberId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'communications' }, (payload) => {
         if (!payload.new.recipient_id || payload.new.recipient_id === memberId) {
           const newItem = payload.new as CommunicationItem;
@@ -95,11 +95,6 @@ export function NotificationProvider({ children, memberId }: { children: ReactNo
           void fetchCommunications(false);
         }
       })
-      .subscribe();
-
-    // Écouteur Realtime : Alerte Trésorier Critique (Vibration + Réveil d'écran lors des nouvelles cotisations)
-    const channelTreasury = supabase
-      .channel('public:treasury_contributions_mobile')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'sass_contributions', filter: 'status=eq.En attente' }, (payload) => {
         const contrib = payload.new;
         sendNativeNotification({
@@ -108,22 +103,15 @@ export function NotificationProvider({ children, memberId }: { children: ReactNo
           channelId: 'dmk_treasury',
         });
       })
-      .subscribe();
-
-    // Écouteur Realtime : Nouvelles réunions / Dahiras programmés + Rappel 1H
-    const channelEvents = supabase
-      .channel('public:events_realtime_reminders')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'events' }, (payload) => {
         const newEvent = payload.new;
         if (newEvent && newEvent.title && newEvent.event_date) {
-          // Notification immédiate d'annonce de la nouvelle réunion/événement
           sendNativeNotification({
             title: `📅 Nouvel Événement : ${newEvent.title}`,
             body: `Programmé pour le ${new Date(newEvent.event_date).toLocaleDateString('fr-FR')} à ${new Date(newEvent.event_date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}.`,
             channelId: 'dmk_alerts',
           });
 
-          // Programmation automatique du rappel 1 heure avant
           void scheduleEventReminderNotification({
             eventId: newEvent.id,
             title: newEvent.title,
@@ -143,9 +131,14 @@ export function NotificationProvider({ children, memberId }: { children: ReactNo
       })
       .subscribe();
 
+    let lastSyncTime = Date.now();
     const handleFocus = () => {
-      void fetchCommunications(false);
-      void syncUpcomingEventReminders();
+      const now = Date.now();
+      if (now - lastSyncTime > 45000) {
+        lastSyncTime = now;
+        void fetchCommunications(false);
+        void syncUpcomingEventReminders();
+      }
     };
     window.addEventListener('focus', handleFocus);
 
@@ -153,8 +146,7 @@ export function NotificationProvider({ children, memberId }: { children: ReactNo
     if (Capacitor.isNativePlatform()) {
       App.addListener('appStateChange', (state) => {
         if (state.isActive) {
-          void fetchCommunications(false);
-          void syncUpcomingEventReminders();
+          handleFocus();
         }
       }).then((handle) => {
         appStateListener = handle;
@@ -162,9 +154,7 @@ export function NotificationProvider({ children, memberId }: { children: ReactNo
     }
 
     return () => {
-      supabase.removeChannel(channelComms);
-      supabase.removeChannel(channelTreasury);
-      supabase.removeChannel(channelEvents);
+      supabase.removeChannel(unifiedChannel);
       window.removeEventListener('focus', handleFocus);
       if (appStateListener) appStateListener.remove();
     };

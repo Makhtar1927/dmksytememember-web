@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode, type FC } from 'react';
+import { createContext, useContext, useEffect, useState, useRef, type ReactNode, type FC } from 'react';
 import { supabase } from '../lib/supabase';
 import type { User, Session } from '@supabase/supabase-js';
 
@@ -29,13 +29,17 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [memberId, setMemberId] = useState<string | null>(null);
   const [memberStatus, setMemberStatus] = useState<string>('Actif');
   const [loading, setLoading] = useState(true);
+  const fetchingEmailRef = useRef<string | null>(null);
 
   const signOut = async () => {
+    fetchingEmailRef.current = null;
     await supabase.auth.signOut();
   };
 
   const fetchUserRole = async (currentUser: User) => {
     if (!currentUser?.email) return;
+    if (fetchingEmailRef.current === currentUser.email) return;
+    fetchingEmailRef.current = currentUser.email;
     try {
       const { data } = await supabase
         .from('members')

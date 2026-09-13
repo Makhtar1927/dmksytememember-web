@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { X, ShieldCheck, ShieldAlert, Loader2, CreditCard, ArrowRight, CheckCircle, Info } from 'lucide-react';
 import { QRCode } from 'react-qr-code';
-import cardBackground from '../assets/Carte Membre.png';
+import cardBackground from '../assets/Carte_Membre.webp';
 
 interface MemberCardModalProps {
   isOpen: boolean;

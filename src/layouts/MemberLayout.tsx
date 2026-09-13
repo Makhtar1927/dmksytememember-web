@@ -1,11 +1,12 @@
-import { type FC, useState, useEffect } from 'react';
+import { type FC, useState, useEffect, lazy, Suspense } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Home, Calendar, Bell, Map, DollarSign, TrendingUp, Wallet, Moon, Sun, ListChecks, User, LogOut, IdCard } from 'lucide-react';
 import { NotificationProvider } from '../lib/NotificationContext';
 import { useNotifications } from '../lib/useNotifications';
 import { supabase } from '../lib/supabase';
-import MemberCardModal from '../components/MemberCardModal';
+
+const MemberCardModal = lazy(() => import('../components/MemberCardModal'));
 
 
 const LayoutContent: FC = () => {
@@ -315,7 +316,11 @@ const LayoutContent: FC = () => {
       </button>
 
       {/* Modales */}
-      <MemberCardModal isOpen={isCardOpen} onClose={() => setIsCardOpen(false)} />
+      {isCardOpen && (
+        <Suspense fallback={null}>
+          <MemberCardModal isOpen={isCardOpen} onClose={() => setIsCardOpen(false)} />
+        </Suspense>
+      )}
 
     </div>
   );
