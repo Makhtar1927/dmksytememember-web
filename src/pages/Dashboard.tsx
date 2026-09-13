@@ -70,7 +70,7 @@ export default function Dashboard() {
           .from('members')
           .select('*')
           .eq('email', user.email)
-          .single();
+          .maybeSingle();
 
         if (member) {
           setMemberInfo(member as MemberInfo);

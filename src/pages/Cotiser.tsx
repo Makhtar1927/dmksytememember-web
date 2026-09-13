@@ -31,7 +31,7 @@ const Cotiser = () => {
 
   useEffect(() => {
     if (session?.user?.email) {
-      supabase.from('members').select('*').eq('email', session.user.email).single()
+      supabase.from('members').select('*').eq('email', session.user.email).maybeSingle()
         .then(({ data }) => {
           if (data) setProfile(data);
         });

@@ -71,9 +71,13 @@ export default function MemberCardModal({ isOpen, onClose }: MemberCardModalProp
           .from('members')
           .select('*')
           .eq('email', user.email)
-          .single();
+          .maybeSingle();
 
         if (error) throw error;
+        if (!member) {
+          setCardStatus('unrequested');
+          return;
+        }
         setMemberInfo(member);
 
         if (member.is_card_blocked) {
