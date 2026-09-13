@@ -10,6 +10,7 @@ export default defineConfig({
     strictPort: true
   },
   build: {
+    modulePreload: false,
     sourcemap: false,
     chunkSizeWarningLimit: 600,
     rollupOptions: {
