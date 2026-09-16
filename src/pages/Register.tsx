@@ -119,12 +119,26 @@ export default function Register() {
     } catch (err: unknown) {
       // Direct client fallback
       try {
+        const cleanEmail = formData.email.trim().toLowerCase();
+
+        // 0. Vérification préalable si le membre existe déjà
+        const { data: existingMember } = await supabase
+          .from('members')
+          .select('id')
+          .eq('email', cleanEmail)
+          .maybeSingle();
+
+        if (existingMember) {
+          setError(`Cette adresse email (${cleanEmail}) est déjà enregistrée. Veuillez vous connecter.`);
+          return;
+        }
+
         const year = new Date().getFullYear();
         const randomNum = Math.floor(1000 + Math.random() * 9000);
         const generatedDmkId = `DMK-${year}-${randomNum}`;
 
         const { error: authErr } = await supabase.auth.signUp({
-          email: formData.email.trim().toLowerCase(),
+          email: cleanEmail,
           password: formData.password,
           options: {
             data: {
@@ -135,13 +149,72 @@ export default function Register() {
           }
         });
 
-        if (authErr) throw authErr;
+        if (authErr) {
+          const authMsg = (authErr.message || '').toLowerCase();
+          const authCode = authErr.code || '';
+          if (
+            authCode === 'user_already_exists' ||
+            authErr.status === 422 ||
+            authMsg.includes('already registered') ||
+            authMsg.includes('already exists')
+          ) {
+            // Est-ce qu'il existe déjà dans members ?
+            const { data: existingInDb } = await supabase
+              .from('members')
+              .select('id, dmk_id')
+              .eq('email', cleanEmail)
+              .maybeSingle();
+
+            if (existingInDb) {
+              setError(`Cette adresse email (${cleanEmail}) est déjà enregistrée. Veuillez vous connecter.`);
+              return;
+            }
+
+            // Le compte est dans auth.users mais pas dans members (inscription interrompue) !
+            // On procède à l'insertion dans members pour finaliser l'inscription :
+            const { error: recoveryDbErr } = await supabase.from('members').insert([{
+              dmk_id: generatedDmkId,
+              first_name: formData.first_name,
+              last_name: formData.last_name,
+              email: cleanEmail,
+              phone: formData.phone || null,
+              sector: formData.sector || 'Non attribué',
+              role: 'Membre Simple',
+              status: 'En attente',
+              gender: formData.gender || 'Masculin',
+              birth_date: formData.birth_date || null,
+              birth_place: formData.birth_place || null,
+              address: formData.address || null,
+              profession: formData.profession || null,
+              cni_number: formData.cni_number || null,
+              cni_issue_date: formData.cni_issue_date || null,
+              cni_expiry_date: formData.cni_expiry_date || null,
+              blood_type: formData.blood_type || null,
+              join_date: formData.join_date || new Date().toISOString().split('T')[0],
+              sass_magal: Number(formData.sass_magal) || 0,
+              sass_ziaar: Number(formData.sass_ziaar) || 0,
+              sass_kst: Number(formData.sass_kst) || 0,
+              sass_cahier: Number(formData.sass_cahier) || 0,
+              sass_projets: Number(formData.sass_projets) || 0,
+              sass_autres: Number(formData.sass_autres) || 0,
+              password: formData.password
+            }]);
+
+            if (!recoveryDbErr) {
+              setSuccessData({ dmk_id: generatedDmkId });
+              return;
+            } else {
+              throw new Error(`Échec de l'insertion dans la base de données : ${recoveryDbErr.message}. Avez-vous exécuté le script SQL dans Supabase ?`);
+            }
+          }
+          throw authErr;
+        }
 
         const { error: dbErr } = await supabase.from('members').insert([{
           dmk_id: generatedDmkId,
           first_name: formData.first_name,
           last_name: formData.last_name,
-          email: formData.email.trim().toLowerCase(),
+          email: cleanEmail,
           phone: formData.phone || null,
           sector: formData.sector || 'Non attribué',
           role: 'Membre Simple',
@@ -169,9 +242,21 @@ export default function Register() {
         setSuccessData({ dmk_id: generatedDmkId });
 
       } catch (fallbackErr: unknown) {
-        const errMsg = err instanceof Error ? err.message : '';
+        const primaryMsg = err instanceof Error ? err.message : '';
         const fallbackMsg = fallbackErr instanceof Error ? fallbackErr.message : '';
-        setError(errMsg || fallbackMsg || 'Échec de l\'inscription.');
+        const combinedMsg = `${primaryMsg} ${fallbackMsg}`.toLowerCase();
+
+        if (
+          combinedMsg.includes('already registered') ||
+          combinedMsg.includes('already exists') ||
+          combinedMsg.includes('user_already_exists') ||
+          combinedMsg.includes('déjà') ||
+          combinedMsg.includes('422')
+        ) {
+          setError(`Cette adresse email est déjà enregistrée. Veuillez vous connecter.`);
+        } else {
+          setError(fallbackMsg || primaryMsg || 'Échec de l\'inscription.');
+        }
       }
     } finally {
       setLoading(false);
@@ -273,8 +358,16 @@ export default function Register() {
           ) : (
             <form onSubmit={handleRegister} className="space-y-8">
               {error && (
-                <div className="rounded-2xl border border-red-200/60 dark:border-red-900/50 bg-red-50 dark:bg-red-900/20 p-4 text-sm font-medium text-red-600 dark:text-red-400">
-                  {error}
+                <div className="rounded-2xl border border-red-200/60 dark:border-red-900/50 bg-red-50 dark:bg-red-900/20 p-4 text-sm font-medium text-red-600 dark:text-red-400 flex items-center justify-between gap-3">
+                  <span>{error}</span>
+                  {error.includes('déjà') && (
+                    <Link
+                      to="/login"
+                      className="px-3.5 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-bold shrink-0 hover:bg-blue-700 transition-colors shadow-sm"
+                    >
+                      Se connecter
+                    </Link>
+                  )}
                 </div>
               )}
 
