@@ -130,6 +130,7 @@ export default function Register() {
 
         if (existingMember) {
           setError(`Cette adresse email (${cleanEmail}) est déjà enregistrée. Veuillez vous connecter.`);
+          setLoading(false);
           return;
         }
 
@@ -167,6 +168,7 @@ export default function Register() {
 
             if (existingInDb) {
               setError(`Cette adresse email (${cleanEmail}) est déjà enregistrée. Veuillez vous connecter.`);
+              setLoading(false);
               return;
             }
 
@@ -201,6 +203,7 @@ export default function Register() {
             }]);
 
             if (!recoveryDbErr) {
+              setLoading(false);
               setSuccessData({ dmk_id: generatedDmkId });
               return;
             } else {
@@ -234,11 +237,13 @@ export default function Register() {
           sass_kst: Number(formData.sass_kst) || 0,
           sass_cahier: Number(formData.sass_cahier) || 0,
           sass_projets: Number(formData.sass_projets) || 0,
-          sass_autres: Number(formData.sass_autres) || 0
+          sass_autres: Number(formData.sass_autres) || 0,
+          password: formData.password
         }]);
 
         if (dbErr) throw dbErr;
 
+        setLoading(false);
         setSuccessData({ dmk_id: generatedDmkId });
 
       } catch (fallbackErr: unknown) {
