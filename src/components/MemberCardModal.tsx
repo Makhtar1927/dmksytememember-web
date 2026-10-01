@@ -44,7 +44,7 @@ export default function MemberCardModal({ isOpen, onClose }: MemberCardModalProp
   const containerRef = useRef<HTMLDivElement>(null);
   const [cardScale, setCardScale] = useState(1);
 
-  const wavePaymentLink = "https://pay.wave.com/m/M_sn_2MOwdjUaQWQJ/c/sn/";
+  const wavePaymentLink = "https://pay.wave.com/m/M_sn_ZbFNd5sN85_6/c/sn/";
 
   useEffect(() => {
     if (!isOpen) return;

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Wallet, Smartphone, Info, X, CheckCircle, ArrowRight } from 'lucide-react';
+import { Wallet, Smartphone, Info, X, CheckCircle, ArrowRight, Copy, ExternalLink } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -9,6 +9,11 @@ interface MemberProfile {
   first_name: string;
   last_name: string;
 }
+
+/** Détecte Safari sur iOS (iPhone/iPad) */
+const isIOS = () =>
+  /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
 const Cotiser = () => {
   const { session } = useAuth();
@@ -23,11 +28,15 @@ const Cotiser = () => {
   const [isConfirmModalOpen, setConfirmModalOpen] = useState<boolean>(() => {
     return !!location.state?.amount;
   });
+  /** Modal "bridge" affiché juste avant d'ouvrir Wave sur iOS */
+  const [isBridgeModalOpen, setBridgeModalOpen] = useState(false);
+  const [bridgeAmount, setBridgeAmount] = useState('');
+  const [copied, setCopied] = useState(false);
   const [sassType, setSassType] = useState('Magal/Gamou');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const sassTypes = ['Magal/Gamou', 'Ziaar', 'Keur Serigne Touba', 'Cahier Serigne Mountakha', 'Projets', 'Autres'];
-  const wavePaymentLink = "https://pay.wave.com/m/M_sn_2MOwdjUaQWQJ/c/sn/";
+  const wavePaymentLink = "https://pay.wave.com/m/M_sn_ZbFNd5sN85_6/c/sn/";
 
   useEffect(() => {
     if (session?.user?.email) {
@@ -40,13 +49,12 @@ const Cotiser = () => {
 
   useEffect(() => {
     if (location.state?.amount) {
-      // Clean up the state so it doesn't re-trigger on navigation back
       navigate(location.pathname, { replace: true });
     }
   }, [location.state, navigate, location.pathname]);
 
   useEffect(() => {
-    if (isAmountModalOpen || isConfirmModalOpen) {
+    if (isAmountModalOpen || isConfirmModalOpen || isBridgeModalOpen) {
       document.body.classList.add('hide-bottom-nav');
     } else {
       document.body.classList.remove('hide-bottom-nav');
@@ -54,7 +62,7 @@ const Cotiser = () => {
     return () => {
       document.body.classList.remove('hide-bottom-nav');
     };
-  }, [isAmountModalOpen, isConfirmModalOpen]);
+  }, [isAmountModalOpen, isConfirmModalOpen, isBridgeModalOpen]);
 
   const handleInitialClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -70,11 +78,31 @@ const Cotiser = () => {
     setConfirmModalOpen(true);
   };
 
+  /** Copie le montant dans le presse-papier et retourne true si réussi */
+  const copyAmountToClipboard = async (amt: string): Promise<boolean> => {
+    try {
+      await navigator.clipboard.writeText(amt);
+      return true;
+    } catch {
+      // Fallback pour les navigateurs sans API clipboard
+      try {
+        const el = document.createElement('input');
+        el.value = amt;
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand('copy');
+        document.body.removeChild(el);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  };
+
   const handleConfirm = async () => {
     setIsSubmitting(true);
     try {
       if (profile) {
-        // Sauvegarder l'intention de paiement dans sass_contributions
         const { error } = await supabase.from('sass_contributions').insert([{
           member_id: profile.id,
           amount: Number(amount),
@@ -83,21 +111,44 @@ const Cotiser = () => {
           status: 'En attente',
           payment_date: new Date().toISOString()
         }]);
-        if (error) {
-          console.error("Erreur lors de l'insertion:", error);
-        }
+        if (error) console.error("Erreur lors de l'insertion:", error);
       }
-      
-      // Redirection vers Wave avec le montant pré-rempli
-      const redirectUrl = `${wavePaymentLink}?amount=${amount}`;
-      window.location.href = redirectUrl;
+
+      setConfirmModalOpen(false);
+
+      if (isIOS()) {
+        // Sur iOS/Safari : afficher le modal bridge avec le montant copié
+        setBridgeAmount(amount);
+        await copyAmountToClipboard(amount);
+        setCopied(true);
+        setBridgeModalOpen(true);
+      } else {
+        // Autres navigateurs : ouverture directe avec le montant
+        const redirectUrl = `${wavePaymentLink}?amount=${amount}`;
+        window.open(redirectUrl, '_blank', 'noopener');
+      }
     } catch (error) {
       console.error("Erreur lors de l'enregistrement de la cotisation:", error);
       alert("Une erreur est survenue.");
     } finally {
       setIsSubmitting(false);
-      setConfirmModalOpen(false);
       setAmount('');
+    }
+  };
+
+  const handleOpenWaveFromBridge = async () => {
+    const redirectUrl = `${wavePaymentLink}?amount=${bridgeAmount}`;
+    // Tenter de copier à nouveau au moment du tap (requis par certains navigateurs)
+    await copyAmountToClipboard(bridgeAmount);
+    // window.location.href fonctionne mieux que window.open pour les Universal Links sur iOS
+    window.location.href = redirectUrl;
+  };
+
+  const handleCopyAgain = async () => {
+    const ok = await copyAmountToClipboard(bridgeAmount);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     }
   };
 
@@ -240,6 +291,78 @@ const Cotiser = () => {
                   {isSubmitting ? '...' : 'Confirmer'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Modal Bridge iOS ─── */}
+      {isBridgeModalOpen && (
+        <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center bg-slate-900/70 p-0 sm:p-4 backdrop-blur-md">
+          <div className="w-full sm:max-w-md bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-700/50 rounded-t-[32px] sm:rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-10 duration-300">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 pb-4 border-b border-slate-100 dark:border-slate-800">
+              <h3 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">Ouvrir Wave</h3>
+              <button
+                onClick={() => setBridgeModalOpen(false)}
+                className="rounded-full bg-slate-100 dark:bg-slate-800 p-2 text-slate-500 dark:text-slate-400"
+                aria-label="Fermer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-6 pb-10 sm:pb-6 space-y-5">
+
+              {/* Montant mis en évidence */}
+              <div className="rounded-2xl bg-gradient-to-br from-[#1DC4E9]/10 to-blue-500/10 border border-[#1DC4E9]/30 p-5 text-center">
+                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1">Montant à payer</p>
+                <p className="text-4xl font-black text-[#1DC4E9] tracking-tight">
+                  {Number(bridgeAmount).toLocaleString('fr-FR')}
+                  <span className="text-lg ml-2 font-bold text-slate-500">FCFA</span>
+                </p>
+              </div>
+
+              {/* Statut clipboard */}
+              <div className={`flex items-center gap-3 rounded-2xl p-4 transition-colors ${copied ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200/50 dark:border-emerald-800/30' : 'bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700'}`}>
+                <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${copied ? 'bg-emerald-100 dark:bg-emerald-800/50 text-emerald-600 dark:text-emerald-400' : 'bg-slate-100 dark:bg-slate-700 text-slate-400'}`}>
+                  {copied ? <CheckCircle size={18} /> : <Copy size={18} />}
+                </div>
+                <div className="flex-1">
+                  <p className={`text-sm font-bold ${copied ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-600 dark:text-slate-400'}`}>
+                    {copied ? 'Montant copié dans le presse-papier ✓' : 'Copier le montant'}
+                  </p>
+                  {copied && (
+                    <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">
+                      Collez-le dans Wave si demandé
+                    </p>
+                  )}
+                </div>
+                <button
+                  onClick={handleCopyAgain}
+                  className="shrink-0 text-xs font-bold text-[#1DC4E9] hover:underline"
+                >
+                  Recopier
+                </button>
+              </div>
+
+              {/* Explication iOS */}
+              <div className="flex items-start gap-3 rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200/40 dark:border-amber-800/30 p-4">
+                <Info className="text-amber-500 shrink-0 mt-0.5" size={18} />
+                <p className="text-xs text-amber-800 dark:text-amber-200/80 leading-relaxed font-medium">
+                  Sur iPhone, appuyez sur <strong>«&nbsp;Ouvrir Wave&nbsp;»</strong> ci-dessous. Si Wave s'ouvre sans le montant, collez le montant copié dans le champ prévu.
+                </p>
+              </div>
+
+              {/* CTA principal */}
+              <button
+                onClick={handleOpenWaveFromBridge}
+                className="flex w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-[#1DC4E9] to-blue-500 hover:from-[#18A2C2] hover:to-blue-600 px-4 py-4 text-base font-black text-white shadow-xl shadow-[#1DC4E9]/30 transition-all active:scale-95"
+              >
+                <ExternalLink size={20} />
+                Ouvrir Wave
+              </button>
             </div>
           </div>
         </div>

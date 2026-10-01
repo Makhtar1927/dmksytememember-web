@@ -501,7 +501,7 @@ export default function Secteur() {
           
           <div className="p-5 bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100 group-hover:scale-105 transition-transform duration-500">
             <QRCode 
-              value="https://pay.wave.com/m/M_sn_2MOwdjUaQWQJ/c/sn/" 
+              value="https://pay.wave.com/m/M_sn_ZbFNd5sN85_6/c/sn/" 
               size={180}
               className="qr-code-style"
               fgColor="#0f172a"
