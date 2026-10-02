@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { Map, Wallet, Calendar, Bell, X, CheckCircle, Search, CalendarDays, FileText, ScanLine } from 'lucide-react';
+import { Map, Wallet, Calendar, Bell, X, CheckCircle, Search, CalendarDays, FileText, ScanLine, Inbox } from 'lucide-react';
 import { QRCode } from 'react-qr-code';
 
 interface Member {
@@ -355,6 +355,67 @@ export default function Secteur() {
       };
     }
   }, [reportType, reportWeekPreset, customWeekStart, customWeekEnd, reportMonth, reportYear]);
+
+  // Live Report Preview State
+  const [reportLoading, setReportLoading] = useState(false);
+  const [previewContributions, setPreviewContributions] = useState<Contribution[]>([]);
+  const [previewTotalCollected, setPreviewTotalCollected] = useState(0);
+  const [previewTotalsByType, setPreviewTotalsByType] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (!isReportModalVisible) return;
+    let isMounted = true;
+
+    async function fetchReportPreview() {
+      setReportLoading(true);
+      try {
+        const { startDate, endDate } = getReportDateRange();
+        const memberIds = sectorMembers.map(m => m.id);
+        if (memberIds.length === 0) {
+          if (isMounted) {
+            setPreviewContributions([]);
+            setPreviewTotalCollected(0);
+            setPreviewTotalsByType({});
+            setReportLoading(false);
+          }
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from('sass_contributions')
+          .select('*')
+          .in('member_id', memberIds)
+          .gte('payment_date', startDate.toISOString())
+          .lte('payment_date', endDate.toISOString())
+          .eq('status', 'Validé')
+          .order('payment_date', { ascending: false });
+
+        if (error) throw error;
+        const contribs = (data || []) as Contribution[];
+
+        let total = 0;
+        const byType: Record<string, number> = {};
+        contribs.forEach(c => {
+          total += c.amount;
+          const sType = c.sass_type || 'Général';
+          byType[sType] = (byType[sType] || 0) + c.amount;
+        });
+
+        if (isMounted) {
+          setPreviewContributions(contribs);
+          setPreviewTotalCollected(total);
+          setPreviewTotalsByType(byType);
+          setReportLoading(false);
+        }
+      } catch (err) {
+        console.error('Erreur chargement aperçu rapport secteur:', err);
+        if (isMounted) setReportLoading(false);
+      }
+    }
+
+    fetchReportPreview();
+    return () => { isMounted = false; };
+  }, [isReportModalVisible, getReportDateRange, sectorMembers]);
 
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
@@ -795,159 +856,253 @@ export default function Secteur() {
         </div>
       )}
 
-      {/* MODAL : RAPPORTS (SÉLECTION SEMAINE / MOIS) */}
+      {/* MODAL : RAPPORTS (SÉLECTION SEMAINE / MOIS & RÉCAPITULATIF) */}
       {isReportModalVisible && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 dark:bg-black/60 p-4 backdrop-blur-md">
-          <div className="w-full max-w-lg bg-white/95 dark:bg-slate-900/95 border border-white/20 dark:border-slate-700/50 rounded-[32px] shadow-2xl p-6 sm:p-8 animate-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center mb-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 dark:bg-black/60 p-3 sm:p-4 backdrop-blur-md">
+          <div className="w-full max-w-xl max-h-[92vh] flex flex-col bg-white/95 dark:bg-slate-900/95 border border-white/20 dark:border-slate-700/50 rounded-[32px] shadow-2xl p-5 sm:p-7 animate-in zoom-in-95 duration-200 overflow-hidden">
+            {/* Header modal */}
+            <div className="flex justify-between items-center pb-4 mb-3 border-b border-slate-200/50 dark:border-slate-800/50">
               <div>
-                <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">Générer un Rapport</h3>
-                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 mt-0.5">Secteur {sectorName}</p>
+                <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">Rapport de Collecte</h3>
+                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 mt-0.5">Secteur {sectorName} • DMK</p>
               </div>
               <button 
                 onClick={() => setReportModalVisible(false)} 
-                className="rounded-full bg-slate-100/50 dark:bg-slate-800/50 p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                className="rounded-full bg-slate-100/70 dark:bg-slate-800/70 p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                 aria-label="Fermer"
                 title="Fermer"
               >
-                <X size={20} />
+                <X size={18} />
               </button>
             </div>
 
-            {/* Switch Type de Rapport */}
-            <div className="flex p-1 bg-slate-100 dark:bg-slate-800/80 rounded-2xl mb-6 border border-slate-200/50 dark:border-slate-700/50">
-              <button
-                type="button"
-                onClick={() => setReportType('hebdo')}
-                className={`flex-1 py-2.5 rounded-xl text-sm font-black transition-all flex items-center justify-center gap-2 ${
-                  reportType === 'hebdo'
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                <CalendarDays size={16} />
-                Hebdomadaire
-              </button>
-              <button
-                type="button"
-                onClick={() => setReportType('mensuel')}
-                className={`flex-1 py-2.5 rounded-xl text-sm font-black transition-all flex items-center justify-center gap-2 ${
-                  reportType === 'mensuel'
-                    ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                <Calendar size={16} />
-                Mensuel
-              </button>
-            </div>
+            {/* Corps déroulant du modal */}
+            <div className="overflow-y-auto pr-1 -mr-1 flex-1 space-y-4">
+              {/* Switch Type de Rapport */}
+              <div className="flex p-1 bg-slate-100 dark:bg-slate-800/80 rounded-2xl border border-slate-200/50 dark:border-slate-700/50">
+                <button
+                  type="button"
+                  onClick={() => setReportType('hebdo')}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-black transition-all flex items-center justify-center gap-2 ${
+                    reportType === 'hebdo'
+                      ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <CalendarDays size={16} />
+                  Hebdomadaire
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReportType('mensuel')}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-black transition-all flex items-center justify-center gap-2 ${
+                    reportType === 'mensuel'
+                      ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Calendar size={16} />
+                  Mensuel
+                </button>
+              </div>
 
-            {/* Sélecteur selon le type de rapport */}
-            {reportType === 'hebdo' ? (
-              <div className="space-y-4 mb-6">
-                <label className="block text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Choisir la semaine
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { id: 'current', label: 'Cette semaine' },
-                    { id: 'prev1', label: 'Semaine passée (-1)' },
-                    { id: 'prev2', label: 'Il y a 2 semaines' },
-                    { id: 'custom', label: 'Dates libres' },
-                  ].map((preset) => (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      onClick={() => setReportWeekPreset(preset.id as any)}
-                      className={`px-3 py-2.5 rounded-xl text-xs font-bold border transition-all text-center ${
-                        reportWeekPreset === preset.id
-                          ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 shadow-sm'
-                          : 'border-slate-200/70 dark:border-slate-700/70 bg-white/50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
-                      }`}
-                    >
-                      {preset.label}
-                    </button>
-                  ))}
+              {/* Sélecteur selon le type de rapport */}
+              {reportType === 'hebdo' ? (
+                <div className="space-y-2.5">
+                  <label className="block text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Choisir la semaine
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { id: 'current', label: 'Cette semaine' },
+                      { id: 'prev1', label: 'Semaine passée (-1)' },
+                      { id: 'prev2', label: 'Il y a 2 semaines' },
+                      { id: 'custom', label: 'Dates libres' },
+                    ].map((preset) => (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => setReportWeekPreset(preset.id as any)}
+                        className={`px-3 py-2.5 rounded-xl text-xs font-bold border transition-all text-center ${
+                          reportWeekPreset === preset.id
+                            ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 shadow-sm font-black'
+                            : 'border-slate-200/70 dark:border-slate-700/70 bg-white/50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {reportWeekPreset === 'custom' && (
+                    <div className="grid grid-cols-2 gap-3 pt-1 animate-in fade-in-50 duration-200">
+                      <div>
+                        <span className="block text-[11px] font-bold text-slate-500 mb-1">Date début</span>
+                        <input
+                          type="date"
+                          value={customWeekStart}
+                          onChange={(e) => setCustomWeekStart(e.target.value)}
+                          className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <span className="block text-[11px] font-bold text-slate-500 mb-1">Date fin</span>
+                        <input
+                          type="date"
+                          value={customWeekEnd}
+                          onChange={(e) => setCustomWeekEnd(e.target.value)}
+                          className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
-
-                {reportWeekPreset === 'custom' && (
-                  <div className="grid grid-cols-2 gap-3 pt-2 animate-in fade-in-50 duration-200">
+              ) : (
+                <div className="space-y-2.5">
+                  <label className="block text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Choisir le mois et l'année
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <span className="block text-[11px] font-bold text-slate-500 mb-1">Date début</span>
-                      <input
-                        type="date"
-                        value={customWeekStart}
-                        onChange={(e) => setCustomWeekStart(e.target.value)}
-                        className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
+                      <span className="block text-[11px] font-bold text-slate-500 mb-1">Mois</span>
+                      <select
+                        value={reportMonth}
+                        onChange={(e) => setReportMonth(Number(e.target.value))}
+                        className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      >
+                        {MONTHS_FR.map((m, idx) => (
+                          <option key={m} value={idx}>{m}</option>
+                        ))}
+                      </select>
                     </div>
                     <div>
-                      <span className="block text-[11px] font-bold text-slate-500 mb-1">Date fin</span>
-                      <input
-                        type="date"
-                        value={customWeekEnd}
-                        onChange={(e) => setCustomWeekEnd(e.target.value)}
-                        className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
+                      <span className="block text-[11px] font-bold text-slate-500 mb-1">Année</span>
+                      <select
+                        value={reportYear}
+                        onChange={(e) => setReportYear(Number(e.target.value))}
+                        className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      >
+                        {[new Date().getFullYear(), new Date().getFullYear() - 1, new Date().getFullYear() - 2].map((yr) => (
+                          <option key={yr} value={yr}>{yr}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* Badge période sélectionnée */}
+              <div className="rounded-2xl border border-blue-200/50 dark:border-blue-900/40 bg-blue-50/50 dark:bg-blue-950/30 p-3 flex items-center gap-3">
+                <CalendarDays className="text-blue-600 dark:text-blue-400 shrink-0" size={18} />
+                <div className="text-xs">
+                  <span className="font-bold text-slate-500 dark:text-slate-400 block text-[10px] uppercase tracking-wider">Période prise en compte</span>
+                  <span className="font-black text-slate-800 dark:text-slate-200">{getReportDateRange().dateText}</span>
+                </div>
+              </div>
+
+              {/* ─── RÉCAPITULATIF EN DIRECT ─── */}
+              <div className="space-y-3 pt-1">
+                <div className="flex items-center gap-2">
+                  <div className={`w-1 h-4 rounded-full ${reportType === 'hebdo' ? 'bg-blue-600' : 'bg-amber-600'}`}></div>
+                  <h4 className="text-sm font-black text-slate-900 dark:text-white">Récapitulatif de la Période</h4>
+                </div>
+
+                {reportLoading ? (
+                  <div className="flex items-center justify-center p-8 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200/50 dark:border-slate-800/50">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"></div>
+                    <span className="ml-3 text-xs font-bold text-slate-500 dark:text-slate-400">Calcul du récapitulatif...</span>
+                  </div>
+                ) : (
+                  <>
+                    {/* Cartes KPIs */}
+                    <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                      <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/50 dark:border-emerald-900/40">
+                        <span className="block text-[9px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Total Collecté</span>
+                        <span className="block text-base sm:text-lg font-black text-emerald-800 dark:text-emerald-300 mt-0.5">
+                          {previewTotalCollected.toLocaleString('fr-FR')} F
+                        </span>
+                      </div>
+                      <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/50 dark:border-slate-700/50">
+                        <span className="block text-[9px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Paiements</span>
+                        <span className="block text-base sm:text-lg font-black text-slate-900 dark:text-white mt-0.5">
+                          {previewContributions.length}
+                        </span>
+                      </div>
+                      <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/50 dark:border-slate-700/50">
+                        <span className="block text-[9px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Membres Actifs</span>
+                        <span className="block text-base sm:text-lg font-black text-slate-900 dark:text-white mt-0.5">
+                          {new Set(previewContributions.map(c => c.member_id)).size}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Répartition par type de Sass */}
+                    {Object.keys(previewTotalsByType).length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {Object.entries(previewTotalsByType).map(([type, amt]) => (
+                          <span
+                            key={type}
+                            className="inline-flex items-center px-2.5 py-1 rounded-xl text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/50 dark:border-slate-700/50"
+                          >
+                            {type} : <strong className="ml-1 text-slate-900 dark:text-white">{amt.toLocaleString('fr-FR')} F</strong>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Journal des transactions de la période */}
+                    <div className="rounded-2xl border border-slate-200/60 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-800/30 overflow-hidden">
+                      <div className="px-3.5 py-2 border-b border-slate-200/60 dark:border-slate-800/80 flex items-center justify-between">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                          Transactions de la période ({previewContributions.length})
+                        </span>
+                      </div>
+                      {previewContributions.length === 0 ? (
+                        <div className="p-6 text-center text-slate-400 dark:text-slate-500 text-xs font-bold flex flex-col items-center justify-center gap-2">
+                          <Inbox size={24} className="opacity-50" />
+                          <span>Aucune transaction enregistrée pour cette période</span>
+                        </div>
+                      ) : (
+                        <div className="max-h-44 overflow-y-auto divide-y divide-slate-200/40 dark:divide-slate-800/40">
+                          {previewContributions.slice(0, 30).map((c) => {
+                            const member = sectorMembers.find(m => m.id === c.member_id);
+                            const memberName = member ? `${member.first_name} ${member.last_name}` : 'Membre inconnu';
+                            const dateStr = new Date(c.payment_date).toLocaleDateString('fr-FR');
+                            return (
+                              <div key={c.id} className="p-2.5 px-3.5 flex items-center justify-between text-xs hover:bg-slate-100/50 dark:hover:bg-slate-800/50 transition-colors">
+                                <div className="min-w-0 pr-2">
+                                  <p className="font-bold text-slate-900 dark:text-white truncate">{memberName}</p>
+                                  <p className="text-[10px] text-slate-500 dark:text-slate-400">Sass {c.sass_type || 'Général'} • {dateStr}</p>
+                                </div>
+                                <span className="font-black text-emerald-600 dark:text-emerald-400 shrink-0">
+                                  +{c.amount.toLocaleString('fr-FR')} F
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </>
                 )}
               </div>
-            ) : (
-              <div className="space-y-4 mb-6">
-                <label className="block text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Choisir le mois et l'année
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <span className="block text-[11px] font-bold text-slate-500 mb-1">Mois</span>
-                    <select
-                      value={reportMonth}
-                      onChange={(e) => setReportMonth(Number(e.target.value))}
-                      className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                    >
-                      {MONTHS_FR.map((m, idx) => (
-                        <option key={m} value={idx}>{m}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <span className="block text-[11px] font-bold text-slate-500 mb-1">Année</span>
-                    <select
-                      value={reportYear}
-                      onChange={(e) => setReportYear(Number(e.target.value))}
-                      className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                    >
-                      {[new Date().getFullYear(), new Date().getFullYear() - 1, new Date().getFullYear() - 2].map((yr) => (
-                        <option key={yr} value={yr}>{yr}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Badge récapitulatif de la période sélectionnée */}
-            <div className="rounded-2xl border border-blue-200/50 dark:border-blue-900/40 bg-blue-50/50 dark:bg-blue-950/30 p-3.5 mb-6 flex items-center gap-3">
-              <CalendarDays className="text-blue-600 dark:text-blue-400 shrink-0" size={20} />
-              <div className="text-xs">
-                <span className="font-bold text-slate-500 dark:text-slate-400 block text-[10px] uppercase tracking-wider">Période prise en compte</span>
-                <span className="font-black text-slate-800 dark:text-slate-200">{getReportDateRange().dateText}</span>
-              </div>
             </div>
 
-            <button 
-              onClick={generatePDF}
-              disabled={isGeneratingPDF}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 dark:bg-white px-4 py-4 text-base font-black text-white dark:text-slate-900 transition-all hover:bg-slate-800 dark:hover:bg-slate-100 shadow-xl shadow-slate-900/20 dark:shadow-white/20 active:scale-95 disabled:opacity-50"
-            >
-              {isGeneratingPDF ? (
-                <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 dark:border-slate-900/30 border-t-white dark:border-t-slate-900"></div>
-              ) : (
-                <FileText size={20} />
-              )}
-              {isGeneratingPDF ? 'Génération en cours...' : 'Imprimer / Sauvegarder (PDF)'}
-            </button>
+            {/* Bouton Fixe d'Impression */}
+            <div className="pt-3.5 mt-2 border-t border-slate-200/50 dark:border-slate-800/50 shrink-0">
+              <button 
+                onClick={generatePDF}
+                disabled={isGeneratingPDF}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 dark:bg-white px-4 py-3.5 text-sm sm:text-base font-black text-white dark:text-slate-900 transition-all hover:bg-slate-800 dark:hover:bg-slate-100 shadow-xl shadow-slate-900/20 dark:shadow-white/20 active:scale-95 disabled:opacity-50"
+              >
+                {isGeneratingPDF ? (
+                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 dark:border-slate-900/30 border-t-white dark:border-t-slate-900"></div>
+                ) : (
+                  <FileText size={18} />
+                )}
+                {isGeneratingPDF ? 'Génération en cours...' : 'Imprimer / Télécharger (PDF)'}
+              </button>
+            </div>
           </div>
         </div>
       )}

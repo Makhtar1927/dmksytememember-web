@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { DollarSign, ArrowDownRight, ArrowUpRight, CheckCircle, X, PlusCircle, FileText, CalendarDays, Calendar, Calendar as CalendarIcon, Moon, Star, Sparkles } from 'lucide-react';
+import { DollarSign, ArrowDownRight, ArrowUpRight, ArrowDownLeft, CheckCircle, X, PlusCircle, FileText, CalendarDays, Calendar, Calendar as CalendarIcon, Moon, Star, Sparkles, Inbox } from 'lucide-react';
 
 const EXPENSE_REASONS = [
   'Achat Logistique', 'Location Sono/Matériel', 'Restauration / Alimentation',
@@ -328,6 +328,167 @@ export default function Tresorerie() {
       };
     }
   }, [reportType, reportWeekPreset, customWeekStart, customWeekEnd, reportMonth, reportYear]);
+
+  // Live Report Preview State
+  const [reportLoading, setReportLoading] = useState(false);
+  const [previewTotalEntries, setPreviewTotalEntries] = useState(0);
+  const [previewTotalExpenses, setPreviewTotalExpenses] = useState(0);
+  const [previewNetBalance, setPreviewNetBalance] = useState(0);
+  const [previewTotalSass, setPreviewTotalSass] = useState(0);
+  const [previewTotalGenInc, setPreviewTotalGenInc] = useState(0);
+  const [previewExpensesByReason, setPreviewExpensesByReason] = useState<Record<string, number>>({});
+  const [previewMovements, setPreviewMovements] = useState<Array<{
+    id: string;
+    date: string;
+    title: string;
+    subtitle: string;
+    amount: number;
+    isIncome: boolean;
+  }>>([]);
+  const [previewEventExpenses, setPreviewEventExpenses] = useState<Array<{
+    id: string;
+    expense_date: string;
+    beneficiary: string;
+    amount: number;
+    description?: string;
+  }>>([]);
+
+  useEffect(() => {
+    if (!isReportModalVisible) return;
+    let isMounted = true;
+
+    async function fetchReportPreview() {
+      setReportLoading(true);
+      try {
+        const isEventReport = reportType === 'Magal' || reportType === 'Gamou' || reportType === 'Ziaar';
+        const { startDate, endDate } = getReportDateRange();
+        const startDateStr = startDate.toISOString();
+        const endDateStr = endDate.toISOString();
+
+        if (isEventReport) {
+          const { data, error } = await supabase
+            .from('treasury_expenses')
+            .select('*')
+            .eq('reason', reportType)
+            .order('expense_date', { ascending: false });
+
+          if (error) throw error;
+          const expenses = data || [];
+          let totalExp = 0;
+          expenses.forEach((e: any) => { totalExp += Number(e.amount) || 0; });
+
+          if (isMounted) {
+            setPreviewEventExpenses(expenses);
+            setPreviewTotalExpenses(totalExp);
+            setPreviewTotalEntries(0);
+            setPreviewNetBalance(-totalExp);
+            setReportLoading(false);
+          }
+        } else {
+          const [contribsRes, genIncomesRes, expensesRes] = await Promise.all([
+            supabase
+              .from('sass_contributions')
+              .select('id, amount, payment_date, sass_type, members:member_id(first_name, last_name, sector)')
+              .gte('payment_date', startDateStr)
+              .lte('payment_date', endDateStr)
+              .eq('status', 'Validé'),
+            supabase
+              .from('treasury_incomes')
+              .select('id, amount, income_date, source, description')
+              .gte('income_date', startDateStr)
+              .lte('income_date', endDateStr),
+            supabase
+              .from('treasury_expenses')
+              .select('id, amount, expense_date, reason, beneficiary, description')
+              .gte('expense_date', startDateStr)
+              .lte('expense_date', endDateStr)
+          ]);
+
+          const safeContribs = contribsRes.data || [];
+          const safeGenIncomes = genIncomesRes.data || [];
+          const safeExpenses = expensesRes.data || [];
+
+          let totalSass = 0;
+          safeContribs.forEach((c: any) => { totalSass += Number(c.amount) || 0; });
+
+          let totalGenInc = 0;
+          safeGenIncomes.forEach((i: any) => { totalGenInc += Number(i.amount) || 0; });
+
+          let totalExp = 0;
+          const expByReason: Record<string, number> = {};
+          safeExpenses.forEach((e: any) => {
+            const amt = Number(e.amount) || 0;
+            const rsn = e.reason || 'Autre';
+            expByReason[rsn] = (expByReason[rsn] || 0) + amt;
+            totalExp += amt;
+          });
+
+          const movs: Array<{
+            id: string;
+            date: string;
+            title: string;
+            subtitle: string;
+            amount: number;
+            isIncome: boolean;
+          }> = [];
+
+          safeContribs.forEach((c: any) => {
+            const mem = c.members as unknown as { first_name?: string; last_name?: string } | null;
+            const name = mem ? `${mem.first_name || ''} ${mem.last_name || ''}`.trim() : 'Membre';
+            movs.push({
+              id: c.id,
+              date: c.payment_date,
+              title: `Sass: ${name}`,
+              subtitle: `Cotisation ${c.sass_type || 'Général'}`,
+              amount: c.amount,
+              isIncome: true
+            });
+          });
+
+          safeGenIncomes.forEach((i: any) => {
+            movs.push({
+              id: i.id,
+              date: i.income_date,
+              title: i.source || 'Entrée trésorerie',
+              subtitle: i.description || '',
+              amount: i.amount,
+              isIncome: true
+            });
+          });
+
+          safeExpenses.forEach((e: any) => {
+            movs.push({
+              id: e.id,
+              date: e.expense_date,
+              title: e.reason || 'Dépense trésorerie',
+              subtitle: e.beneficiary || e.description || '',
+              amount: e.amount,
+              isIncome: false
+            });
+          });
+
+          movs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+          if (isMounted) {
+            setPreviewTotalSass(totalSass);
+            setPreviewTotalGenInc(totalGenInc);
+            setPreviewTotalEntries(totalSass + totalGenInc);
+            setPreviewTotalExpenses(totalExp);
+            setPreviewNetBalance((totalSass + totalGenInc) - totalExp);
+            setPreviewExpensesByReason(expByReason);
+            setPreviewMovements(movs);
+            setReportLoading(false);
+          }
+        }
+      } catch (err) {
+        console.error('Erreur chargement aperçu rapport trésorerie:', err);
+        if (isMounted) setReportLoading(false);
+      }
+    }
+
+    fetchReportPreview();
+    return () => { isMounted = false; };
+  }, [isReportModalVisible, reportType, getReportDateRange]);
 
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
@@ -831,165 +992,319 @@ export default function Tresorerie() {
 
       {/* MODAL RAPPORTS VISUEL & SÉLECTION SEMAINE / MOIS */}
       {isReportModalVisible && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 dark:bg-black/60 p-4 backdrop-blur-md">
-          <div className="w-full max-w-lg bg-white/95 dark:bg-slate-900/95 border border-white/20 dark:border-slate-700/50 rounded-[32px] shadow-2xl p-6 sm:p-8 animate-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center mb-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 dark:bg-black/60 p-3 sm:p-4 backdrop-blur-md">
+          <div className="w-full max-w-xl max-h-[92vh] flex flex-col bg-white/95 dark:bg-slate-900/95 border border-white/20 dark:border-slate-700/50 rounded-[32px] shadow-2xl p-5 sm:p-7 animate-in zoom-in-95 duration-200 overflow-hidden">
+            {/* Header modal */}
+            <div className="flex justify-between items-center pb-4 mb-3 border-b border-slate-200/50 dark:border-slate-800/50">
               <div>
                 <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">Rapport Financier</h3>
                 <p className="text-xs font-bold text-slate-500 dark:text-slate-400 mt-0.5">
-                  {reportType === 'hebdo' && 'Édition Hebdomadaire'}
-                  {reportType === 'mensuel' && 'Édition Mensuelle'}
+                  {reportType === 'hebdo' && 'Édition Hebdomadaire • DMK'}
+                  {reportType === 'mensuel' && 'Édition Mensuelle • DMK'}
                   {(reportType === 'Magal' || reportType === 'Gamou' || reportType === 'Ziaar') && `Bilan Décaissements - ${reportType}`}
                 </p>
               </div>
               <button 
                 onClick={() => setReportModalVisible(false)} 
-                className="rounded-full bg-slate-100/50 dark:bg-slate-800/50 p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                className="rounded-full bg-slate-100/70 dark:bg-slate-800/70 p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                 aria-label="Fermer"
                 title="Fermer"
               >
-                <X size={20} />
+                <X size={18} />
               </button>
             </div>
 
-            {/* Switch rapide entre Hebdo / Mensuel pour rapports généraux */}
-            {(reportType === 'hebdo' || reportType === 'mensuel') && (
-              <div className="flex p-1 bg-slate-100 dark:bg-slate-800/80 rounded-2xl mb-6 border border-slate-200/50 dark:border-slate-700/50">
-                <button
-                  type="button"
-                  onClick={() => setReportType('hebdo')}
-                  className={`flex-1 py-2.5 rounded-xl text-sm font-black transition-all flex items-center justify-center gap-2 ${
-                    reportType === 'hebdo'
-                      ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  <CalendarDays size={16} />
-                  Hebdomadaire
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setReportType('mensuel')}
-                  className={`flex-1 py-2.5 rounded-xl text-sm font-black transition-all flex items-center justify-center gap-2 ${
-                    reportType === 'mensuel'
-                      ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  <Calendar size={16} />
-                  Mensuel
-                </button>
-              </div>
-            )}
-
-            {/* Sélecteur de période selon le type de rapport */}
-            {reportType === 'hebdo' && (
-              <div className="space-y-4 mb-6">
-                <label className="block text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Choisir la semaine
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { id: 'current', label: 'Cette semaine' },
-                    { id: 'prev1', label: 'Semaine passée (-1)' },
-                    { id: 'prev2', label: 'Il y a 2 semaines' },
-                    { id: 'custom', label: 'Dates libres' },
-                  ].map((preset) => (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      onClick={() => setReportWeekPreset(preset.id as any)}
-                      className={`px-3 py-2.5 rounded-xl text-xs font-bold border transition-all text-center ${
-                        reportWeekPreset === preset.id
-                          ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 shadow-sm'
-                          : 'border-slate-200/70 dark:border-slate-700/70 bg-white/50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
-                      }`}
-                    >
-                      {preset.label}
-                    </button>
-                  ))}
+            {/* Corps déroulant du modal */}
+            <div className="overflow-y-auto pr-1 -mr-1 flex-1 space-y-4">
+              {/* Switch rapide entre Hebdo / Mensuel pour rapports généraux */}
+              {(reportType === 'hebdo' || reportType === 'mensuel') && (
+                <div className="flex p-1 bg-slate-100 dark:bg-slate-800/80 rounded-2xl border border-slate-200/50 dark:border-slate-700/50">
+                  <button
+                    type="button"
+                    onClick={() => setReportType('hebdo')}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-black transition-all flex items-center justify-center gap-2 ${
+                      reportType === 'hebdo'
+                        ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <CalendarDays size={16} />
+                    Hebdomadaire
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReportType('mensuel')}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-black transition-all flex items-center justify-center gap-2 ${
+                      reportType === 'mensuel'
+                        ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <Calendar size={16} />
+                    Mensuel
+                  </button>
                 </div>
+              )}
 
-                {reportWeekPreset === 'custom' && (
-                  <div className="grid grid-cols-2 gap-3 pt-2 animate-in fade-in-50 duration-200">
+              {/* Sélecteur de période selon le type de rapport */}
+              {reportType === 'hebdo' && (
+                <div className="space-y-2.5">
+                  <label className="block text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Choisir la semaine
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { id: 'current', label: 'Cette semaine' },
+                      { id: 'prev1', label: 'Semaine passée (-1)' },
+                      { id: 'prev2', label: 'Il y a 2 semaines' },
+                      { id: 'custom', label: 'Dates libres' },
+                    ].map((preset) => (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => setReportWeekPreset(preset.id as any)}
+                        className={`px-3 py-2.5 rounded-xl text-xs font-bold border transition-all text-center ${
+                          reportWeekPreset === preset.id
+                            ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 shadow-sm font-black'
+                            : 'border-slate-200/70 dark:border-slate-700/70 bg-white/50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {reportWeekPreset === 'custom' && (
+                    <div className="grid grid-cols-2 gap-3 pt-1 animate-in fade-in-50 duration-200">
+                      <div>
+                        <span className="block text-[11px] font-bold text-slate-500 mb-1">Date début</span>
+                        <input
+                          type="date"
+                          value={customWeekStart}
+                          onChange={(e) => setCustomWeekStart(e.target.value)}
+                          className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <span className="block text-[11px] font-bold text-slate-500 mb-1">Date fin</span>
+                        <input
+                          type="date"
+                          value={customWeekEnd}
+                          onChange={(e) => setCustomWeekEnd(e.target.value)}
+                          className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {reportType === 'mensuel' && (
+                <div className="space-y-2.5">
+                  <label className="block text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Choisir le mois et l'année
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <span className="block text-[11px] font-bold text-slate-500 mb-1">Date début</span>
-                      <input
-                        type="date"
-                        value={customWeekStart}
-                        onChange={(e) => setCustomWeekStart(e.target.value)}
-                        className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
+                      <span className="block text-[11px] font-bold text-slate-500 mb-1">Mois</span>
+                      <select
+                        value={reportMonth}
+                        onChange={(e) => setReportMonth(Number(e.target.value))}
+                        className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      >
+                        {MONTHS_FR.map((m, idx) => (
+                          <option key={m} value={idx}>{m}</option>
+                        ))}
+                      </select>
                     </div>
                     <div>
-                      <span className="block text-[11px] font-bold text-slate-500 mb-1">Date fin</span>
-                      <input
-                        type="date"
-                        value={customWeekEnd}
-                        onChange={(e) => setCustomWeekEnd(e.target.value)}
-                        className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
+                      <span className="block text-[11px] font-bold text-slate-500 mb-1">Année</span>
+                      <select
+                        value={reportYear}
+                        onChange={(e) => setReportYear(Number(e.target.value))}
+                        className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      >
+                        {[new Date().getFullYear(), new Date().getFullYear() - 1, new Date().getFullYear() - 2].map((yr) => (
+                          <option key={yr} value={yr}>{yr}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* Badge récapitulatif de la période */}
+              <div className="rounded-2xl border border-blue-200/50 dark:border-blue-900/40 bg-blue-50/50 dark:bg-blue-950/30 p-3 flex items-center gap-3">
+                <CalendarDays className="text-blue-600 dark:text-blue-400 shrink-0" size={18} />
+                <div className="text-xs">
+                  <span className="font-bold text-slate-500 dark:text-slate-400 block text-[10px] uppercase tracking-wider">Période du document</span>
+                  <span className="font-black text-slate-800 dark:text-slate-200">{getReportDateRange().dateText}</span>
+                </div>
+              </div>
+
+              {/* ─── RÉCAPITULATIF EN DIRECT ─── */}
+              <div className="space-y-3 pt-1">
+                <div className="flex items-center gap-2">
+                  <div className={`w-1 h-4 rounded-full ${reportType === 'hebdo' ? 'bg-blue-600' : reportType === 'mensuel' ? 'bg-amber-600' : 'bg-red-600'}`}></div>
+                  <h4 className="text-sm font-black text-slate-900 dark:text-white">Récapitulatif Financier</h4>
+                </div>
+
+                {reportLoading ? (
+                  <div className="flex items-center justify-center p-8 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200/50 dark:border-slate-800/50">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"></div>
+                    <span className="ml-3 text-xs font-bold text-slate-500 dark:text-slate-400">Calcul des données financières...</span>
+                  </div>
+                ) : (reportType === 'Magal' || reportType === 'Gamou' || reportType === 'Ziaar') ? (
+                  /* Bilan Événementiel */
+                  <div className="space-y-3">
+                    <div className="p-4 rounded-2xl bg-red-50 dark:bg-red-950/30 border border-red-200/50 dark:border-red-900/40">
+                      <span className="block text-[10px] font-black uppercase tracking-wider text-red-700 dark:text-red-400">Total Dépenses Engagées</span>
+                      <span className="block text-xl font-black text-red-700 dark:text-red-300 mt-1">
+                        {previewTotalExpenses.toLocaleString('fr-FR')} FCFA
+                      </span>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200/60 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-800/30 overflow-hidden">
+                      <div className="px-3.5 py-2 border-b border-slate-200/60 dark:border-slate-800/80 flex items-center justify-between">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                          Décaissements ({previewEventExpenses.length})
+                        </span>
+                      </div>
+                      {previewEventExpenses.length === 0 ? (
+                        <div className="p-6 text-center text-slate-400 dark:text-slate-500 text-xs font-bold flex flex-col items-center justify-center gap-2">
+                          <Inbox size={24} className="opacity-50" />
+                          <span>Aucune dépense enregistrée pour cet événement</span>
+                        </div>
+                      ) : (
+                        <div className="max-h-44 overflow-y-auto divide-y divide-slate-200/40 dark:divide-slate-800/40">
+                          {previewEventExpenses.map((e) => (
+                            <div key={e.id} className="p-2.5 px-3.5 flex items-center justify-between text-xs hover:bg-slate-100/50 dark:hover:bg-slate-800/50 transition-colors">
+                              <div className="min-w-0 pr-2">
+                                <p className="font-bold text-slate-900 dark:text-white truncate">{e.beneficiary || 'Sans bénéficiaire'}</p>
+                                <p className="text-[10px] text-slate-500 dark:text-slate-400">{e.description || reportType} • {new Date(e.expense_date).toLocaleDateString('fr-FR')}</p>
+                              </div>
+                              <span className="font-black text-red-600 dark:text-red-400 shrink-0">
+                                -{Number(e.amount).toLocaleString('fr-FR')} F
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  /* Bilan Périodique (Hebdo / Mensuel) */
+                  <>
+                    {/* 3 Cartes KPIs */}
+                    <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                      <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/50 dark:border-emerald-900/40">
+                        <span className="block text-[9px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Entrées</span>
+                        <span className="block text-sm sm:text-base font-black text-emerald-800 dark:text-emerald-300 mt-0.5">
+                          +{previewTotalEntries.toLocaleString('fr-FR')} F
+                        </span>
+                      </div>
+                      <div className="p-3 rounded-2xl bg-red-50 dark:bg-red-950/30 border border-red-200/50 dark:border-red-900/40">
+                        <span className="block text-[9px] font-black uppercase tracking-wider text-red-700 dark:text-red-400">Sorties</span>
+                        <span className="block text-sm sm:text-base font-black text-red-700 dark:text-red-300 mt-0.5">
+                          -{previewTotalExpenses.toLocaleString('fr-FR')} F
+                        </span>
+                      </div>
+                      <div className={`p-3 rounded-2xl border ${
+                        previewNetBalance >= 0 
+                          ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-200/50 dark:border-blue-900/40' 
+                          : 'bg-red-50 dark:bg-red-950/30 border-red-200/50 dark:border-red-900/40'
+                      }`}>
+                        <span className={`block text-[9px] font-black uppercase tracking-wider ${
+                          previewNetBalance >= 0 ? 'text-blue-700 dark:text-blue-400' : 'text-red-700 dark:text-red-400'
+                        }`}>
+                          Solde Net
+                        </span>
+                        <span className={`block text-sm sm:text-base font-black mt-0.5 ${
+                          previewNetBalance >= 0 ? 'text-blue-700 dark:text-blue-300' : 'text-red-700 dark:text-red-300'
+                        }`}>
+                          {previewNetBalance >= 0 ? '+' : ''}{previewNetBalance.toLocaleString('fr-FR')} F
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Pills Détails */}
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-xl text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/50 dark:border-slate-700/50">
+                        Sass : <strong className="ml-1 text-slate-900 dark:text-white">{previewTotalSass.toLocaleString('fr-FR')} F</strong>
+                      </span>
+                      {previewTotalGenInc > 0 && (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-xl text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/50 dark:border-slate-700/50">
+                          Autres entrées : <strong className="ml-1 text-slate-900 dark:text-white">{previewTotalGenInc.toLocaleString('fr-FR')} F</strong>
+                        </span>
+                      )}
+                      {Object.entries(previewExpensesByReason).slice(0, 3).map(([rsn, amt]) => (
+                        <span
+                          key={rsn}
+                          className="inline-flex items-center px-2.5 py-1 rounded-xl text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/50 dark:border-slate-700/50"
+                        >
+                          {rsn} : <strong className="ml-1 text-red-600 dark:text-red-400">-{amt.toLocaleString('fr-FR')} F</strong>
+                        </span>
+                      ))}
+                    </div>
+
+                    {/* Journal des mouvements récents de la période */}
+                    <div className="rounded-2xl border border-slate-200/60 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-800/30 overflow-hidden">
+                      <div className="px-3.5 py-2 border-b border-slate-200/60 dark:border-slate-800/80 flex items-center justify-between">
+                        <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                          Mouvements de la période ({previewMovements.length})
+                        </span>
+                      </div>
+                      {previewMovements.length === 0 ? (
+                        <div className="p-6 text-center text-slate-400 dark:text-slate-500 text-xs font-bold flex flex-col items-center justify-center gap-2">
+                          <Inbox size={24} className="opacity-50" />
+                          <span>Aucun mouvement financier sur cette période</span>
+                        </div>
+                      ) : (
+                        <div className="max-h-44 overflow-y-auto divide-y divide-slate-200/40 dark:divide-slate-800/40">
+                          {previewMovements.slice(0, 25).map((m) => {
+                            const dateStr = new Date(m.date).toLocaleDateString('fr-FR');
+                            return (
+                              <div key={m.id} className="p-2.5 px-3.5 flex items-center justify-between text-xs hover:bg-slate-100/50 dark:hover:bg-slate-800/50 transition-colors">
+                                <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                                    m.isIncome ? 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600' : 'bg-red-100 dark:bg-red-950/50 text-red-600'
+                                  }`}>
+                                    {m.isIncome ? <ArrowDownLeft size={14} /> : <ArrowUpRight size={14} />}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="font-bold text-slate-900 dark:text-white truncate">{m.title}</p>
+                                    <p className="text-[10px] text-slate-500 dark:text-slate-400">{m.subtitle ? `${m.subtitle} • ` : ''}{dateStr}</p>
+                                  </div>
+                                </div>
+                                <span className={`font-black shrink-0 ${m.isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                                  {m.isIncome ? '+' : '-'}{Number(m.amount).toLocaleString('fr-FR')} F
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </>
                 )}
-              </div>
-            )}
-
-            {reportType === 'mensuel' && (
-              <div className="space-y-4 mb-6">
-                <label className="block text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Choisir le mois et l'année
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <span className="block text-[11px] font-bold text-slate-500 mb-1">Mois</span>
-                    <select
-                      value={reportMonth}
-                      onChange={(e) => setReportMonth(Number(e.target.value))}
-                      className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                    >
-                      {MONTHS_FR.map((m, idx) => (
-                        <option key={m} value={idx}>{m}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <span className="block text-[11px] font-bold text-slate-500 mb-1">Année</span>
-                    <select
-                      value={reportYear}
-                      onChange={(e) => setReportYear(Number(e.target.value))}
-                      className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                    >
-                      {[new Date().getFullYear(), new Date().getFullYear() - 1, new Date().getFullYear() - 2].map((yr) => (
-                        <option key={yr} value={yr}>{yr}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Badge récapitulatif */}
-            <div className="rounded-2xl border border-blue-200/50 dark:border-blue-900/40 bg-blue-50/50 dark:bg-blue-950/30 p-3.5 mb-6 flex items-center gap-3">
-              <CalendarDays className="text-blue-600 dark:text-blue-400 shrink-0" size={20} />
-              <div className="text-xs">
-                <span className="font-bold text-slate-500 dark:text-slate-400 block text-[10px] uppercase tracking-wider">Période du document</span>
-                <span className="font-black text-slate-800 dark:text-slate-200">{getReportDateRange().dateText}</span>
               </div>
             </div>
 
-            <button 
-              onClick={generatePDF}
-              disabled={isGeneratingPDF}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-4 text-base font-bold text-white transition-all shadow-xl shadow-blue-600/30 hover:bg-blue-700 hover:shadow-blue-600/40 active:scale-95 disabled:opacity-50"
-            >
-              {isGeneratingPDF ? (
-                <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white"></div>
-              ) : (
-                <FileText size={20} />
-              )}
-              {isGeneratingPDF ? 'Génération en cours...' : 'Imprimer / Sauvegarder (PDF)'}
-            </button>
+            {/* Bouton Fixe d'Impression */}
+            <div className="pt-3.5 mt-2 border-t border-slate-200/50 dark:border-slate-800/50 shrink-0">
+              <button 
+                onClick={generatePDF}
+                disabled={isGeneratingPDF}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3.5 text-sm sm:text-base font-black text-white transition-all shadow-xl shadow-blue-600/30 hover:bg-blue-700 hover:shadow-blue-600/40 active:scale-95 disabled:opacity-50"
+              >
+                {isGeneratingPDF ? (
+                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white"></div>
+                ) : (
+                  <FileText size={18} />
+                )}
+                {isGeneratingPDF ? 'Génération en cours...' : 'Imprimer / Sauvegarder (PDF)'}
+              </button>
+            </div>
           </div>
         </div>
       )}
