@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { DollarSign, ArrowDownRight, ArrowUpRight, CheckCircle, X, PlusCircle, FileText, CalendarDays, Calendar as CalendarIcon, Moon, Star, Sparkles } from 'lucide-react';
+import { DollarSign, ArrowDownRight, ArrowUpRight, CheckCircle, X, PlusCircle, FileText, CalendarDays, Calendar, Calendar as CalendarIcon, Moon, Star, Sparkles } from 'lucide-react';
 
 const EXPENSE_REASONS = [
   'Achat Logistique', 'Location Sono/Matériel', 'Restauration / Alimentation',
@@ -55,6 +55,17 @@ export default function Tresorerie() {
   // Report State
   const [isReportModalVisible, setReportModalVisible] = useState(false);
   const [reportType, setReportType] = useState<'hebdo'|'mensuel'|'Magal'|'Gamou'|'Ziaar'>('hebdo');
+
+  // Report Period Selection
+  const [reportWeekPreset, setReportWeekPreset] = useState<'current' | 'prev1' | 'prev2' | 'prev3' | 'custom'>('current');
+  const [customWeekStart, setCustomWeekStart] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().split('T')[0];
+  });
+  const [customWeekEnd, setCustomWeekEnd] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [reportMonth, setReportMonth] = useState<number>(new Date().getMonth());
+  const [reportYear, setReportYear] = useState<number>(new Date().getFullYear());
 
   const fetchTreasuryData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -248,6 +259,76 @@ export default function Tresorerie() {
     }
   };
 
+  const MONTHS_FR = [
+    'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+    'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+  ];
+
+  const getReportDateRange = useCallback(() => {
+    if (reportType === 'hebdo') {
+      if (reportWeekPreset === 'custom') {
+        const start = customWeekStart ? new Date(`${customWeekStart}T00:00:00`) : new Date();
+        const end = customWeekEnd ? new Date(`${customWeekEnd}T23:59:59.999`) : new Date();
+        return {
+          startDate: start,
+          endDate: end,
+          dateText: `Du ${start.toLocaleDateString('fr-FR')} au ${end.toLocaleDateString('fr-FR')}`
+        };
+      } else {
+        const now = new Date();
+        const day = now.getDay();
+        const diffToFriday = (day < 5 ? 7 : 0) + day - 5;
+        const currentFriday = new Date(now);
+        currentFriday.setDate(now.getDate() - diffToFriday);
+        currentFriday.setHours(0, 0, 0, 0);
+
+        let start = new Date(currentFriday);
+        let end = new Date(currentFriday);
+
+        if (reportWeekPreset === 'current') {
+          end.setDate(currentFriday.getDate() + 6);
+          end.setHours(23, 59, 59, 999);
+        } else if (reportWeekPreset === 'prev1') {
+          start.setDate(currentFriday.getDate() - 7);
+          end = new Date(start);
+          end.setDate(start.getDate() + 6);
+          end.setHours(23, 59, 59, 999);
+        } else if (reportWeekPreset === 'prev2') {
+          start.setDate(currentFriday.getDate() - 14);
+          end = new Date(start);
+          end.setDate(start.getDate() + 6);
+          end.setHours(23, 59, 59, 999);
+        } else if (reportWeekPreset === 'prev3') {
+          start.setDate(currentFriday.getDate() - 21);
+          end = new Date(start);
+          end.setDate(start.getDate() + 6);
+          end.setHours(23, 59, 59, 999);
+        }
+
+        return {
+          startDate: start,
+          endDate: end,
+          dateText: `Du ${start.toLocaleDateString('fr-FR')} au ${end.toLocaleDateString('fr-FR')}`
+        };
+      }
+    } else if (reportType === 'mensuel') {
+      const start = new Date(reportYear, reportMonth, 1, 0, 0, 0, 0);
+      const end = new Date(reportYear, reportMonth + 1, 0, 23, 59, 59, 999);
+      const monthName = MONTHS_FR[reportMonth];
+      return {
+        startDate: start,
+        endDate: end,
+        dateText: `Mois de ${monthName} ${reportYear} (Du ${start.toLocaleDateString('fr-FR')} au ${end.toLocaleDateString('fr-FR')})`
+      };
+    } else {
+      return {
+        startDate: new Date(0),
+        endDate: new Date(),
+        dateText: `Toutes les dépenses enregistrées pour le ${reportType}`
+      };
+    }
+  }, [reportType, reportWeekPreset, customWeekStart, customWeekEnd, reportMonth, reportYear]);
+
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
   const generatePDF = async () => {
@@ -257,26 +338,9 @@ export default function Tresorerie() {
       const isEventReport = reportType === 'Magal' || reportType === 'Gamou' || reportType === 'Ziaar';
       const title = isEventReport ? `Bilan des Dépenses - ${reportType}` : (reportType === 'hebdo' ? 'Bilan Hebdomadaire' : 'Bilan Mensuel');
       
-      let startDateStr = '';
-      let dateText = '';
-      
-      if (!isEventReport) {
-        if (reportType === 'hebdo') {
-          const d = new Date();
-          const day = d.getDay();
-          const diff = (day < 5 ? 7 : 0) + day - 5; 
-          d.setDate(d.getDate() - diff);
-          d.setHours(0, 0, 0, 0);
-          startDateStr = d.toISOString();
-          dateText = `Du ${d.toLocaleDateString('fr-FR')} à Aujourd'hui`;
-        } else {
-          const d = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-          startDateStr = d.toISOString();
-          dateText = `Mois de ${d.toLocaleString('fr-FR', { month: 'long', year: 'numeric' })}`;
-        }
-      } else {
-        dateText = `Toutes les dépenses enregistrées pour le ${reportType}`;
-      }
+      const { startDate, endDate, dateText } = getReportDateRange();
+      const startDateStr = startDate.toISOString();
+      const endDateStr = endDate.toISOString();
 
       let htmlContent = '';
 
@@ -345,9 +409,22 @@ export default function Tresorerie() {
           </html>
         `;
       } else {
-        const { data: contribs } = await supabase.from('sass_contributions').select('*, members:member_id(sector)').gte('payment_date', startDateStr).eq('status', 'Validé');
-        const { data: genIncomes } = await supabase.from('treasury_incomes').select('*').gte('income_date', startDateStr);
-        const { data: expenses } = await supabase.from('treasury_expenses').select('*').gte('expense_date', startDateStr);
+        const { data: contribs } = await supabase
+          .from('sass_contributions')
+          .select('*, members:member_id(sector)')
+          .gte('payment_date', startDateStr)
+          .lte('payment_date', endDateStr)
+          .eq('status', 'Validé');
+        const { data: genIncomes } = await supabase
+          .from('treasury_incomes')
+          .select('*')
+          .gte('income_date', startDateStr)
+          .lte('income_date', endDateStr);
+        const { data: expenses } = await supabase
+          .from('treasury_expenses')
+          .select('*')
+          .gte('expense_date', startDateStr)
+          .lte('expense_date', endDateStr);
 
         const safeContribs = contribs || [];
         const safeGenIncomes = genIncomes || [];
@@ -496,12 +573,6 @@ export default function Tresorerie() {
       </div>
     );
   }
-
-  const getReportDescription = () => {
-    if (reportType === 'hebdo') return "Du dernier Vendredi à Aujourd'hui";
-    if (reportType === 'mensuel') return "Mois en cours";
-    return `Toutes les dépenses du ${reportType}`;
-  };
 
   return (
     <div className="flex flex-col relative z-10 pb-40 md:pb-8">
@@ -758,39 +829,166 @@ export default function Tresorerie() {
         </div>
       )}
 
-      {/* MODAL RAPPORTS VISUEL */}
+      {/* MODAL RAPPORTS VISUEL & SÉLECTION SEMAINE / MOIS */}
       {isReportModalVisible && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 dark:bg-black/60 p-4 backdrop-blur-md">
-          <div className="w-full max-w-sm bg-white/90 dark:bg-slate-900/90 border border-white/20 dark:border-slate-700/50 rounded-[32px] shadow-2xl p-8 animate-in zoom-in-95 duration-200">
+          <div className="w-full max-w-lg bg-white/95 dark:bg-slate-900/95 border border-white/20 dark:border-slate-700/50 rounded-[32px] shadow-2xl p-6 sm:p-8 animate-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">Rapport {reportType}</h3>
-              <button onClick={() => setReportModalVisible(false)} className="rounded-full bg-slate-100/50 dark:bg-slate-800/50 p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+              <div>
+                <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">Rapport Financier</h3>
+                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 mt-0.5">
+                  {reportType === 'hebdo' && 'Édition Hebdomadaire'}
+                  {reportType === 'mensuel' && 'Édition Mensuelle'}
+                  {(reportType === 'Magal' || reportType === 'Gamou' || reportType === 'Ziaar') && `Bilan Décaissements - ${reportType}`}
+                </p>
+              </div>
+              <button 
+                onClick={() => setReportModalVisible(false)} 
+                className="rounded-full bg-slate-100/50 dark:bg-slate-800/50 p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                aria-label="Fermer"
+                title="Fermer"
+              >
                 <X size={20} />
               </button>
             </div>
-            
-            <div className="rounded-2xl border-2 border-dashed border-slate-200/50 dark:border-slate-700/50 bg-white/50 dark:bg-slate-800/50 p-6 text-center mb-6 shadow-inner">
-              <FileText size={48} className="mx-auto mb-4 text-slate-400 dark:text-slate-500 drop-shadow-sm" />
-              <p className="font-black text-slate-700 dark:text-slate-200">Aperçu du Document</p>
-              <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-2">{getReportDescription()}</p>
-              
-              <div className="mt-5 pt-4 border-t border-slate-200/50 dark:border-slate-700/50 text-left space-y-3">
-                <div className="flex justify-between text-sm items-center">
-                  <span className="text-slate-500 dark:text-slate-400 font-bold">Contenu:</span>
-                  <span className="font-black text-slate-700 dark:text-slate-300 text-right">{(reportType === 'Magal' || reportType === 'Gamou' || reportType === 'Ziaar') ? 'Dépenses Uniquement' : 'Sass, Recettes, Dépenses'}</span>
+
+            {/* Switch rapide entre Hebdo / Mensuel pour rapports généraux */}
+            {(reportType === 'hebdo' || reportType === 'mensuel') && (
+              <div className="flex p-1 bg-slate-100 dark:bg-slate-800/80 rounded-2xl mb-6 border border-slate-200/50 dark:border-slate-700/50">
+                <button
+                  type="button"
+                  onClick={() => setReportType('hebdo')}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-black transition-all flex items-center justify-center gap-2 ${
+                    reportType === 'hebdo'
+                      ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <CalendarDays size={16} />
+                  Hebdomadaire
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReportType('mensuel')}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-black transition-all flex items-center justify-center gap-2 ${
+                    reportType === 'mensuel'
+                      ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Calendar size={16} />
+                  Mensuel
+                </button>
+              </div>
+            )}
+
+            {/* Sélecteur de période selon le type de rapport */}
+            {reportType === 'hebdo' && (
+              <div className="space-y-4 mb-6">
+                <label className="block text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Choisir la semaine
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: 'current', label: 'Cette semaine' },
+                    { id: 'prev1', label: 'Semaine passée (-1)' },
+                    { id: 'prev2', label: 'Il y a 2 semaines' },
+                    { id: 'custom', label: 'Dates libres' },
+                  ].map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => setReportWeekPreset(preset.id as any)}
+                      className={`px-3 py-2.5 rounded-xl text-xs font-bold border transition-all text-center ${
+                        reportWeekPreset === preset.id
+                          ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 shadow-sm'
+                          : 'border-slate-200/70 dark:border-slate-700/70 bg-white/50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
                 </div>
-                <div className="flex justify-between text-sm items-center">
-                  <span className="text-slate-500 dark:text-slate-400 font-bold">Format:</span>
-                  <span className="font-black text-slate-700 dark:text-slate-300">Impression web PDF</span>
+
+                {reportWeekPreset === 'custom' && (
+                  <div className="grid grid-cols-2 gap-3 pt-2 animate-in fade-in-50 duration-200">
+                    <div>
+                      <span className="block text-[11px] font-bold text-slate-500 mb-1">Date début</span>
+                      <input
+                        type="date"
+                        value={customWeekStart}
+                        onChange={(e) => setCustomWeekStart(e.target.value)}
+                        className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <span className="block text-[11px] font-bold text-slate-500 mb-1">Date fin</span>
+                      <input
+                        type="date"
+                        value={customWeekEnd}
+                        onChange={(e) => setCustomWeekEnd(e.target.value)}
+                        className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {reportType === 'mensuel' && (
+              <div className="space-y-4 mb-6">
+                <label className="block text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Choisir le mois et l'année
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <span className="block text-[11px] font-bold text-slate-500 mb-1">Mois</span>
+                    <select
+                      value={reportMonth}
+                      onChange={(e) => setReportMonth(Number(e.target.value))}
+                      className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    >
+                      {MONTHS_FR.map((m, idx) => (
+                        <option key={m} value={idx}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <span className="block text-[11px] font-bold text-slate-500 mb-1">Année</span>
+                    <select
+                      value={reportYear}
+                      onChange={(e) => setReportYear(Number(e.target.value))}
+                      className="w-full text-xs font-bold p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    >
+                      {[new Date().getFullYear(), new Date().getFullYear() - 1, new Date().getFullYear() - 2].map((yr) => (
+                        <option key={yr} value={yr}>{yr}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
+              </div>
+            )}
+
+            {/* Badge récapitulatif */}
+            <div className="rounded-2xl border border-blue-200/50 dark:border-blue-900/40 bg-blue-50/50 dark:bg-blue-950/30 p-3.5 mb-6 flex items-center gap-3">
+              <CalendarDays className="text-blue-600 dark:text-blue-400 shrink-0" size={20} />
+              <div className="text-xs">
+                <span className="font-bold text-slate-500 dark:text-slate-400 block text-[10px] uppercase tracking-wider">Période du document</span>
+                <span className="font-black text-slate-800 dark:text-slate-200">{getReportDateRange().dateText}</span>
               </div>
             </div>
 
             <button 
               onClick={generatePDF}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-4 text-base font-bold text-white transition-all shadow-xl shadow-blue-600/30 hover:bg-blue-700 hover:shadow-blue-600/40 active:scale-95"
+              disabled={isGeneratingPDF}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-4 text-base font-bold text-white transition-all shadow-xl shadow-blue-600/30 hover:bg-blue-700 hover:shadow-blue-600/40 active:scale-95 disabled:opacity-50"
             >
-              <FileText size={20} /> Imprimer / Sauvegarder
+              {isGeneratingPDF ? (
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white"></div>
+              ) : (
+                <FileText size={20} />
+              )}
+              {isGeneratingPDF ? 'Génération en cours...' : 'Imprimer / Sauvegarder (PDF)'}
             </button>
           </div>
         </div>
