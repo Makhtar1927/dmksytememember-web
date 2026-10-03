@@ -992,8 +992,8 @@ export default function Tresorerie() {
 
       {/* MODAL RAPPORTS VISUEL & SÉLECTION SEMAINE / MOIS */}
       {isReportModalVisible && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/70 dark:bg-black/80 p-2 sm:p-4 backdrop-blur-md overflow-hidden">
-          <div className="w-full max-w-xl max-h-[88vh] sm:max-h-[92vh] flex flex-col bg-white/95 dark:bg-slate-900/95 border border-white/20 dark:border-slate-700/50 rounded-[28px] sm:rounded-[32px] shadow-2xl p-4 sm:p-7 animate-in zoom-in-95 duration-200 overflow-hidden my-auto">
+        <div className="fixed inset-0 z-[9999] flex items-start sm:items-center justify-center bg-slate-950/80 p-2 sm:p-4 pt-3 sm:pt-4 backdrop-blur-md overflow-hidden">
+          <div className="w-full max-w-xl max-h-[85vh] sm:max-h-[90vh] flex flex-col bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-[28px] sm:rounded-[32px] shadow-2xl p-4 sm:p-7 animate-in zoom-in-95 duration-200 overflow-hidden my-auto">
             {/* Header modal */}
             <div className="flex justify-between items-center pb-4 mb-3 border-b border-slate-200/50 dark:border-slate-800/50">
               <div>

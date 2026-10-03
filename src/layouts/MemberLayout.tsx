@@ -115,7 +115,7 @@ const LayoutContent: FC = () => {
       </div>
 
       {/* Mobile Header with Theme Toggle */}
-      <div className="md:hidden relative z-40 flex items-center justify-between px-6 py-4 bg-white/60 dark:bg-slate-900/50 border-b border-white/40 dark:border-slate-800/50 shadow-sm">
+      <div className="mobile-header md:hidden relative z-40 flex items-center justify-between px-6 py-4 bg-white/60 dark:bg-slate-900/50 border-b border-white/40 dark:border-slate-800/50 shadow-sm">
         <div className="flex items-center gap-3">
           <div className="h-8 w-8 overflow-hidden rounded-lg shadow-sm">
             <img src="/icon.png" alt="Logo" className="h-full w-full object-cover" onError={(e) => e.currentTarget.style.display='none'} />
