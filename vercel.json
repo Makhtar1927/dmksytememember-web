@@ -49,6 +49,22 @@
   ],
   "rewrites": [
     {
+      "source": "/politique-de-confidentialite",
+      "destination": "/politique-de-confidentialite.html"
+    },
+    {
+      "source": "/privacy-policy",
+      "destination": "/politique-de-confidentialite.html"
+    },
+    {
+      "source": "/suppression-compte",
+      "destination": "/suppression-compte.html"
+    },
+    {
+      "source": "/delete-account",
+      "destination": "/suppression-compte.html"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
