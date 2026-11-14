@@ -4,6 +4,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { MemberLayout } from './layouts/MemberLayout';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import InstallAppPrompt from './components/InstallAppPrompt';
 
 // Code splitting / Lazy loading des pages pour des performances maximales
 const Login = lazy(() => import('./pages/Login'));
@@ -43,6 +44,7 @@ function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <InstallAppPrompt />
         <Routes>
           <Route path="/login" element={<PageWrapper><Login /></PageWrapper>} />
           <Route path="/register" element={<PageWrapper><Register /></PageWrapper>} />

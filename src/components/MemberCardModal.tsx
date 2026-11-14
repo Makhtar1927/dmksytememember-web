@@ -1,9 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { X, ShieldCheck, ShieldAlert, Loader2, CreditCard, ArrowRight, CheckCircle, Info } from 'lucide-react';
+import { X, ShieldCheck, ShieldAlert, Loader2, CreditCard, ArrowRight, CheckCircle, Info, Copy, ExternalLink } from 'lucide-react';
 import { QRCode } from 'react-qr-code';
 import cardBackground from '../assets/Carte_Membre.webp';
+
+/** Détecte Safari sur iOS (iPhone/iPad) */
+const isIOS = () =>
+  /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
 interface MemberCardModalProps {
   isOpen: boolean;
@@ -40,6 +45,9 @@ export default function MemberCardModal({ isOpen, onClose }: MemberCardModalProp
   const [isConfirmModalOpen, setConfirmModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [cardActivationDate, setCardActivationDate] = useState<string | null>(null);
+  /** Modal "bridge" affiché juste avant d'ouvrir Wave sur iOS */
+  const [isBridgeModalOpen, setBridgeModalOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [cardScale, setCardScale] = useState(1);
@@ -128,6 +136,27 @@ export default function MemberCardModal({ isOpen, onClose }: MemberCardModalProp
     };
   }, [isOpen]);
 
+  /** Copie le montant dans le presse-papier et retourne true si réussi */
+  const copyAmountToClipboard = async (amt: string): Promise<boolean> => {
+    try {
+      await navigator.clipboard.writeText(amt);
+      return true;
+    } catch {
+      // Fallback pour les navigateurs sans API clipboard
+      try {
+        const el = document.createElement('input');
+        el.value = amt;
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand('copy');
+        document.body.removeChild(el);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  };
+
   const handleConfirmPayment = async () => {
     setIsSubmitting(true);
     try {
@@ -148,15 +177,41 @@ export default function MemberCardModal({ isOpen, onClose }: MemberCardModalProp
         }
       }
 
-      const redirectUrl = `${wavePaymentLink}?amount=2000`;
-      window.location.href = redirectUrl;
-      setCardStatus('pending');
+      setConfirmModalOpen(false);
+
+      if (isIOS()) {
+        // Sur iOS/Safari : afficher le modal bridge avec le montant copié (2000 FCFA)
+        await copyAmountToClipboard('2000');
+        setCopied(true);
+        setBridgeModalOpen(true);
+      } else {
+        // Autres navigateurs : ouverture directe avec le montant
+        const redirectUrl = `${wavePaymentLink}?amount=2000`;
+        window.open(redirectUrl, '_blank', 'noopener');
+        setCardStatus('pending');
+      }
     } catch (error) {
       console.error("Erreur:", error);
       alert("Une erreur est survenue.");
     } finally {
       setIsSubmitting(false);
-      setConfirmModalOpen(false);
+    }
+  };
+
+  const handleOpenWaveFromBridge = async () => {
+    const redirectUrl = `${wavePaymentLink}?amount=2000`;
+    // Tenter de copier à nouveau au moment du tap (requis par certains navigateurs)
+    await copyAmountToClipboard('2000');
+    setCardStatus('pending');
+    setBridgeModalOpen(false);
+    window.location.href = redirectUrl;
+  };
+
+  const handleCopyAgain = async () => {
+    const ok = await copyAmountToClipboard('2000');
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     }
   };
 
@@ -454,6 +509,78 @@ export default function MemberCardModal({ isOpen, onClose }: MemberCardModalProp
                   {isSubmitting ? '...' : 'Confirmer'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Modal Bridge iOS pour Achat Carte Membre ─── */}
+      {isBridgeModalOpen && (
+        <div className="fixed inset-0 z-[1001] flex items-end sm:items-center justify-center bg-slate-900/70 p-0 sm:p-4 backdrop-blur-md">
+          <div className="w-full sm:max-w-md max-h-[92vh] overflow-y-auto bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-700/50 rounded-t-[32px] sm:rounded-[32px] shadow-2xl flex flex-col animate-in slide-in-from-bottom-10 duration-300">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 pb-4 border-b border-slate-100 dark:border-slate-800">
+              <h3 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">Ouvrir Wave</h3>
+              <button
+                onClick={() => setBridgeModalOpen(false)}
+                className="rounded-full bg-slate-100 dark:bg-slate-800 p-2 text-slate-500 dark:text-slate-400"
+                aria-label="Fermer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-6 pb-10 sm:pb-6 space-y-5">
+
+              {/* Montant mis en évidence */}
+              <div className="rounded-2xl bg-gradient-to-br from-[#1DC4E9]/10 to-blue-500/10 border border-[#1DC4E9]/30 p-5 text-center">
+                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1">Montant de la carte</p>
+                <p className="text-4xl font-black text-[#1DC4E9] tracking-tight">
+                  2 000
+                  <span className="text-lg ml-2 font-bold text-slate-500">FCFA</span>
+                </p>
+              </div>
+
+              {/* Statut clipboard */}
+              <div className={`flex items-center gap-3 rounded-2xl p-4 transition-colors ${copied ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200/50 dark:border-emerald-800/30' : 'bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700'}`}>
+                <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${copied ? 'bg-emerald-100 dark:bg-emerald-800/50 text-emerald-600 dark:text-emerald-400' : 'bg-slate-100 dark:bg-slate-700 text-slate-400'}`}>
+                  {copied ? <CheckCircle size={18} /> : <Copy size={18} />}
+                </div>
+                <div className="flex-1">
+                  <p className={`text-sm font-bold ${copied ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-600 dark:text-slate-400'}`}>
+                    {copied ? 'Montant copié dans le presse-papier ✓' : 'Copier le montant'}
+                  </p>
+                  {copied && (
+                    <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">
+                      Collez-le dans Wave si demandé
+                    </p>
+                  )}
+                </div>
+                <button
+                  onClick={handleCopyAgain}
+                  className="shrink-0 text-xs font-bold text-[#1DC4E9] hover:underline"
+                >
+                  Recopier
+                </button>
+              </div>
+
+              {/* Explication iOS */}
+              <div className="flex items-start gap-3 rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200/40 dark:border-amber-800/30 p-4">
+                <Info className="text-amber-500 shrink-0 mt-0.5" size={18} />
+                <p className="text-xs text-amber-800 dark:text-amber-200/80 leading-relaxed font-medium">
+                  Sur iPhone, appuyez sur <strong>«&nbsp;Ouvrir Wave&nbsp;»</strong> ci-dessous. Si Wave s'ouvre sans le montant, collez le montant copié dans le champ prévu.
+                </p>
+              </div>
+
+              {/* CTA principal */}
+              <button
+                onClick={handleOpenWaveFromBridge}
+                className="flex w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-[#1DC4E9] to-blue-500 hover:from-[#18A2C2] hover:to-blue-600 px-4 py-4 text-base font-black text-white shadow-xl shadow-[#1DC4E9]/30 transition-all active:scale-95"
+              >
+                <ExternalLink size={20} />
+                Ouvrir Wave
+              </button>
             </div>
           </div>
         </div>
