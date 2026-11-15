@@ -1,24 +1,25 @@
-import { lazy, Suspense, type ReactNode } from 'react';
+import { Suspense, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { MemberLayout } from './layouts/MemberLayout';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import InstallAppPrompt from './components/InstallAppPrompt';
+import { lazyWithRetry } from './utils/lazyRetry';
 
-// Code splitting / Lazy loading des pages pour des performances maximales
-const Login = lazy(() => import('./pages/Login'));
-const Register = lazy(() => import('./pages/Register'));
-const Dashboard = lazy(() => import('./pages/Dashboard'));
-const Events = lazy(() => import('./pages/Events'));
-const Profil = lazy(() => import('./pages/Profil'));
-const Notifications = lazy(() => import('./pages/Notifications'));
-const Bureau = lazy(() => import('./pages/Bureau'));
-const Secteur = lazy(() => import('./pages/Secteur'));
-const Cotiser = lazy(() => import('./pages/Cotiser'));
-const Tresorerie = lazy(() => import('./pages/Tresorerie'));
-const Transactions = lazy(() => import('./pages/Transactions'));
-const Statistiques = lazy(() => import('./pages/Statistiques'));
+// Code splitting / Lazy loading sécurisé avec auto-retry en cas de nouveau déploiement
+const Login = lazyWithRetry(() => import('./pages/Login'));
+const Register = lazyWithRetry(() => import('./pages/Register'));
+const Dashboard = lazyWithRetry(() => import('./pages/Dashboard'));
+const Events = lazyWithRetry(() => import('./pages/Events'));
+const Profil = lazyWithRetry(() => import('./pages/Profil'));
+const Notifications = lazyWithRetry(() => import('./pages/Notifications'));
+const Bureau = lazyWithRetry(() => import('./pages/Bureau'));
+const Secteur = lazyWithRetry(() => import('./pages/Secteur'));
+const Cotiser = lazyWithRetry(() => import('./pages/Cotiser'));
+const Tresorerie = lazyWithRetry(() => import('./pages/Tresorerie'));
+const Transactions = lazyWithRetry(() => import('./pages/Transactions'));
+const Statistiques = lazyWithRetry(() => import('./pages/Statistiques'));
 
 function PageLoader() {
   return (

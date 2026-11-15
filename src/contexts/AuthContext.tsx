@@ -86,17 +86,61 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchUserRole(session.user);
+    const handleAuthError = async (err: any) => {
+      const msg = String(err?.message || '');
+      if (msg.includes('Refresh Token') || err?.status === 400) {
+        console.warn('[Auth] Token de session invalide ou expiré, réinitialisation propre...');
+        try {
+          await supabase.auth.signOut();
+        } catch {
+          try {
+            for (let i = localStorage.length - 1; i >= 0; i--) {
+              const key = localStorage.key(i);
+              if (key && (key.startsWith('sb-') || key.includes('supabase.auth'))) {
+                localStorage.removeItem(key);
+              }
+            }
+          } catch {
+            // Ignore storage errors
+          }
+        }
+        setSession(null);
+        setUser(null);
+        setUserRole('Membre Simple');
+        setMemberId(null);
+        setMemberStatus('Actif');
+        setLoading(false);
+      }
+    };
+
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (error) {
+        void handleAuthError(error);
+        return;
+      }
+      const currentSession = data?.session ?? null;
+      setSession(currentSession);
+      setUser(currentSession?.user ?? null);
+      if (currentSession?.user) {
+        fetchUserRole(currentSession.user);
       } else {
         setLoading(false);
       }
+    }).catch((err) => {
+      void handleAuthError(err);
     });
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
+        setSession(null);
+        setUser(null);
+        setUserRole('Membre Simple');
+        setMemberId(null);
+        setMemberStatus('Actif');
+        setLoading(false);
+        return;
+      }
+
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {

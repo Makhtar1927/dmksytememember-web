@@ -1,12 +1,13 @@
-import { type FC, useState, useEffect, lazy, Suspense } from 'react';
+import { type FC, useState, useEffect, Suspense } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Home, Calendar, Bell, Map, DollarSign, TrendingUp, Wallet, Moon, Sun, ListChecks, User, LogOut, IdCard } from 'lucide-react';
 import { NotificationProvider } from '../lib/NotificationContext';
 import { useNotifications } from '../lib/useNotifications';
 import { supabase } from '../lib/supabase';
+import { lazyWithRetry } from '../utils/lazyRetry';
 
-const MemberCardModal = lazy(() => import('../components/MemberCardModal'));
+const MemberCardModal = lazyWithRetry(() => import('../components/MemberCardModal'));
 
 
 const LayoutContent: FC = () => {

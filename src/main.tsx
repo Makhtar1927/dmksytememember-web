@@ -53,13 +53,37 @@ if (typeof Node === 'function' && Node.prototype) {
 // Initialisation des fonctionnalités natives mobiles (Capacitor)
 initCapacitorNative();
 
+// ─────────────────────────────────────────────────────────────
+// AUTO-RECOVERY : Récupération automatique lors d'un nouveau déploiement
+// Vite déclenche vite:preloadError si un chunk n'existe plus sur le CDN.
+// ─────────────────────────────────────────────────────────────
+window.addEventListener('vite:preloadError', (event) => {
+  event.preventDefault();
+  const sessionKey = 'dmk_vite_preload_error_ts';
+  const lastError = sessionStorage.getItem(sessionKey);
+  const now = Date.now();
+  if (!lastError || now - Number(lastError) > 10000) {
+    sessionStorage.setItem(sessionKey, String(now));
+    console.warn('[Vite Preload] Nouveau déploiement détecté, rechargement immédiat...');
+    window.location.reload();
+  }
+});
+
 // Enregistrement du Service Worker PWA
 if ('serviceWorker' in navigator) {
+  // Détecter quand un nouveau Service Worker est activé pour rafraîchir proprement
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    console.log('[PWA] Nouveau Service Worker activé, actualisation...');
+    window.location.reload();
+  });
+
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').then((reg) => {
       if (import.meta.env.DEV) {
         console.log('[PWA] Service Worker enregistré:', reg.scope);
       }
+      // Vérifier immédiatement si une nouvelle version existe
+      reg.update().catch(() => {});
     }).catch((err) => {
       console.warn('[PWA] Échec enregistrement Service Worker:', err);
     });

@@ -1,14 +1,30 @@
 /// <reference lib="webworker" />
 declare const self: ServiceWorkerGlobalScope;
 
-import { precacheAndRoute } from 'workbox-precaching';
+import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
+
+// Supprimer automatiquement tous les anciens caches des déploiements précédents
+cleanupOutdatedCaches();
 
 // Ce tableau sera injecté automatiquement par vite-plugin-pwa au moment du build
 precacheAndRoute(self.__WB_MANIFEST || []);
 
-// Nettoyer les anciens caches si besoin
+// Nettoyer les anciens caches et prendre le contrôle immédiat
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    Promise.all([
+      self.clients.claim(),
+      caches.keys().then((cacheNames) => {
+        return Promise.all(
+          cacheNames.map((name) => {
+            if (!name.includes('workbox-precache')) {
+              return caches.delete(name);
+            }
+          })
+        );
+      })
+    ])
+  );
 });
 
 self.addEventListener('install', () => {
