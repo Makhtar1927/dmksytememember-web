@@ -11,6 +11,15 @@ const SECTORS = [
   "Nouveau"
 ];
 
+export const formatTitleCase = (val: string): string => {
+  if (!val) return '';
+  return val.replace(/\p{L}+/gu, (word) => {
+    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+  });
+};
+
+const TITLE_CASE_FIELDS = ['first_name', 'last_name', 'birth_place', 'profession', 'address'];
+
 export default function Register() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -48,7 +57,16 @@ export default function Register() {
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    let formattedValue = value;
+
+    if (TITLE_CASE_FIELDS.includes(name)) {
+      formattedValue = formatTitleCase(value);
+    } else if (name === 'email') {
+      formattedValue = value.toLowerCase();
+    }
+
+    setFormData(prev => ({ ...prev, [name]: formattedValue }));
   };
 
   const handleRegister = async (e: FormEvent) => {
@@ -77,23 +95,30 @@ export default function Register() {
 
     setLoading(true);
 
+    const cleanFirstName = formatTitleCase(formData.first_name.trim());
+    const cleanLastName = formatTitleCase(formData.last_name.trim());
+    const cleanBirthPlace = formData.birth_place ? formatTitleCase(formData.birth_place.trim()) : null;
+    const cleanAddress = formData.address ? formatTitleCase(formData.address.trim()) : null;
+    const cleanProfession = formData.profession ? formatTitleCase(formData.profession.trim()) : null;
+    const cleanEmail = formData.email.trim().toLowerCase();
+
     try {
       const API_URL = getApiUrl();
       const response = await fetch(`${API_URL}/api/users/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          first_name: formData.first_name,
-          last_name: formData.last_name,
-          email: formData.email,
+          first_name: cleanFirstName,
+          last_name: cleanLastName,
+          email: cleanEmail,
           password: formData.password,
           phone: formData.phone,
           sector: formData.sector,
           gender: formData.gender,
           birth_date: formData.birth_date,
-          birth_place: formData.birth_place,
-          address: formData.address,
-          profession: formData.profession,
+          birth_place: cleanBirthPlace,
+          address: cleanAddress,
+          profession: cleanProfession,
           cni_number: formData.cni_number,
           cni_issue_date: formData.cni_issue_date,
           cni_expiry_date: formData.cni_expiry_date,
@@ -143,8 +168,8 @@ export default function Register() {
           password: formData.password,
           options: {
             data: {
-              first_name: formData.first_name,
-              last_name: formData.last_name,
+              first_name: cleanFirstName,
+              last_name: cleanLastName,
               dmk_id: generatedDmkId
             }
           }
@@ -176,8 +201,8 @@ export default function Register() {
             // On procède à l'insertion dans members pour finaliser l'inscription :
             const { error: recoveryDbErr } = await supabase.from('members').insert([{
               dmk_id: generatedDmkId,
-              first_name: formData.first_name,
-              last_name: formData.last_name,
+              first_name: cleanFirstName,
+              last_name: cleanLastName,
               email: cleanEmail,
               phone: formData.phone || null,
               sector: formData.sector || 'Non attribué',
@@ -185,9 +210,9 @@ export default function Register() {
               status: 'En attente',
               gender: formData.gender || 'Masculin',
               birth_date: formData.birth_date || null,
-              birth_place: formData.birth_place || null,
-              address: formData.address || null,
-              profession: formData.profession || null,
+              birth_place: cleanBirthPlace,
+              address: cleanAddress,
+              profession: cleanProfession,
               cni_number: formData.cni_number || null,
               cni_issue_date: formData.cni_issue_date || null,
               cni_expiry_date: formData.cni_expiry_date || null,
@@ -215,8 +240,8 @@ export default function Register() {
 
         const { error: dbErr } = await supabase.from('members').insert([{
           dmk_id: generatedDmkId,
-          first_name: formData.first_name,
-          last_name: formData.last_name,
+          first_name: cleanFirstName,
+          last_name: cleanLastName,
           email: cleanEmail,
           phone: formData.phone || null,
           sector: formData.sector || 'Non attribué',
@@ -224,9 +249,9 @@ export default function Register() {
           status: 'En attente',
           gender: formData.gender || 'Masculin',
           birth_date: formData.birth_date || null,
-          birth_place: formData.birth_place || null,
-          address: formData.address || null,
-          profession: formData.profession || null,
+          birth_place: cleanBirthPlace,
+          address: cleanAddress,
+          profession: cleanProfession,
           cni_number: formData.cni_number || null,
           cni_issue_date: formData.cni_issue_date || null,
           cni_expiry_date: formData.cni_expiry_date || null,
