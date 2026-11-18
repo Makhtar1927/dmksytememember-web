@@ -76,6 +76,83 @@
         };
       })();
     </script>
+
+    <!-- SAFARI IOS CSS RECOVERY SHIELD -->
+    <script>
+      (function() {
+        // 1. Détection immédiate d'échec de chargement des stylesheets (ex: 404, CORS ou MIME type rejeté)
+        window.addEventListener('error', function(e) {
+          if (e && e.target && e.target.tagName === 'LINK' && e.target.rel === 'stylesheet') {
+            var key = 'dmk_css_recover_ts';
+            var last = sessionStorage.getItem(key);
+            var now = Date.now();
+            if (!last || now - Number(last) > 8000) {
+              sessionStorage.setItem(key, String(now));
+              console.warn('[Safari CSS Shield] Échec stylesheet détecté. Rechargement propre...');
+              if ('caches' in window) {
+                caches.keys().then(function(keys) {
+                  return Promise.all(keys.map(function(k) { return caches.delete(k); }));
+                }).finally(function() {
+                  window.location.reload();
+                });
+              } else {
+                window.location.reload();
+              }
+            }
+          }
+        }, true);
+
+        // 2. Détection après rendu : vérifier si le CSS est réellement actif
+        function verifyStylesApplied() {
+          var hasRules = false;
+          for (var i = 0; i < document.styleSheets.length; i++) {
+            try {
+              var sheet = document.styleSheets[i];
+              if (sheet.cssRules && sheet.cssRules.length > 0) {
+                hasRules = true;
+                break;
+              }
+            } catch (err) {
+              hasRules = true;
+              break;
+            }
+          }
+
+          var links = document.querySelectorAll('link[rel="stylesheet"]');
+          if (links.length > 0 && !hasRules) {
+            var key = 'dmk_css_norules_ts';
+            var last = sessionStorage.getItem(key);
+            var now = Date.now();
+            if (!last || now - Number(last) > 8000) {
+              sessionStorage.setItem(key, String(now));
+              console.warn('[Safari CSS Shield] Styles non appliqués sur Safari. Récupération automatique...');
+              if ('caches' in window) {
+                caches.keys().then(function(keys) {
+                  return Promise.all(keys.map(function(k) { return caches.delete(k); }));
+                }).finally(function() {
+                  window.location.reload();
+                });
+              } else {
+                window.location.reload();
+              }
+            }
+          }
+        }
+
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', function() { setTimeout(verifyStylesApplied, 400); });
+        } else {
+          setTimeout(verifyStylesApplied, 400);
+        }
+
+        // 3. Gestion du bfcache Safari iOS (retour en arrière / sortie de veille)
+        window.addEventListener('pageshow', function(evt) {
+          if (evt.persisted) {
+            setTimeout(verifyStylesApplied, 200);
+          }
+        });
+      })();
+    </script>
   </head>
   <body translate="no" class="notranslate">
     <div id="root" translate="no" class="notranslate"></div>

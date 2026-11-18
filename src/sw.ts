@@ -31,6 +31,19 @@ self.addEventListener('install', () => {
   self.skipWaiting();
 });
 
+// Navigation : Network-First pour garantir que Safari charge toujours le dernier HTML avec les bons hash CSS
+self.addEventListener('fetch', (event) => {
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request).catch(async () => {
+        const cached = await caches.match('/index.html');
+        if (cached) return cached;
+        return new Response('Hors ligne', { status: 503, headers: { 'Content-Type': 'text/plain' } });
+      })
+    );
+  }
+});
+
 // Écoute des Web Push Notifications
 self.addEventListener('push', function (event: any) {
   if (!event.data) return;

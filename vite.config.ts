@@ -10,6 +10,8 @@ export default defineConfig({
     strictPort: true
   },
   build: {
+    target: ['es2020', 'safari14', 'ios14'],
+    cssTarget: ['safari14', 'ios14'],
     modulePreload: false,
     sourcemap: false,
     chunkSizeWarningLimit: 600,
@@ -70,7 +72,7 @@ export default defineConfig({
       },
       disable: process.cwd().includes("'"),
       injectManifest: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        globPatterns: ['**/*.{js,css,ico,png,svg,webp}'],
         maximumFileSizeToCacheInBytes: 5242880
       }
     })
