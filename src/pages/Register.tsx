@@ -99,12 +99,12 @@ export default function Register() {
           cni_expiry_date: formData.cni_expiry_date,
           blood_type: formData.blood_type,
           join_date: formData.join_date,
-          sass_magal: formData.sass_magal,
-          sass_ziaar: formData.sass_ziaar,
-          sass_kst: formData.sass_kst,
-          sass_cahier: formData.sass_cahier,
-          sass_projets: formData.sass_projets,
-          sass_autres: formData.sass_autres
+          sass_magal: Number(formData.sass_magal) || 0,
+          sass_ziaar: Number(formData.sass_ziaar) || 0,
+          sass_kst: Number(formData.sass_kst) || 0,
+          sass_cahier: Number(formData.sass_cahier) || 0,
+          sass_projets: Number(formData.sass_projets) || 0,
+          sass_autres: Number(formData.sass_autres) || 0
         })
       });
 
