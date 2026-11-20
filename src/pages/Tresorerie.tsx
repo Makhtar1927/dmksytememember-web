@@ -277,29 +277,38 @@ export default function Tresorerie() {
       } else {
         const now = new Date();
         const day = now.getDay();
-        const diffToFriday = (day < 5 ? 7 : 0) + day - 5;
-        const currentFriday = new Date(now);
-        currentFriday.setDate(now.getDate() - diffToFriday);
-        currentFriday.setHours(0, 0, 0, 0);
+        // Début de semaine le Samedi 00h00m00s et Fin le Vendredi 23h59m59s
+        // 0: Dim, 1: Lun, 2: Mar, 3: Mer, 4: Jeu, 5: Ven, 6: Sam
+        // Pour Samedi (6): diff = 0
+        // Pour Dimanche (0): diff = 1
+        // Pour Lundi (1): diff = 2 ... Pour Vendredi (5): diff = 6
+        const diffToSaturday = (day + 1) % 7;
+        const currentSaturday = new Date(now);
+        currentSaturday.setDate(now.getDate() - diffToSaturday);
+        currentSaturday.setHours(0, 0, 0, 0);
 
-        let start = new Date(currentFriday);
-        let end = new Date(currentFriday);
+        let start = new Date(currentSaturday);
+        let end = new Date(currentSaturday);
 
         if (reportWeekPreset === 'current') {
-          end.setDate(currentFriday.getDate() + 6);
+          // Cette semaine : Samedi courant 00:00:00 au Vendredi suivant 23:59:59.999
+          end.setDate(currentSaturday.getDate() + 6);
           end.setHours(23, 59, 59, 999);
         } else if (reportWeekPreset === 'prev1') {
-          start.setDate(currentFriday.getDate() - 7);
+          // Semaine passée (-1)
+          start.setDate(currentSaturday.getDate() - 7);
           end = new Date(start);
           end.setDate(start.getDate() + 6);
           end.setHours(23, 59, 59, 999);
         } else if (reportWeekPreset === 'prev2') {
-          start.setDate(currentFriday.getDate() - 14);
+          // Il y a 2 semaines
+          start.setDate(currentSaturday.getDate() - 14);
           end = new Date(start);
           end.setDate(start.getDate() + 6);
           end.setHours(23, 59, 59, 999);
         } else if (reportWeekPreset === 'prev3') {
-          start.setDate(currentFriday.getDate() - 21);
+          // Il y a 3 semaines
+          start.setDate(currentSaturday.getDate() - 21);
           end = new Date(start);
           end.setDate(start.getDate() + 6);
           end.setHours(23, 59, 59, 999);
