@@ -1,15 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { createPrintWindow, printDocument } from '../utils/printUtils';
 import { supabase } from '../lib/supabase';
 import { DollarSign, ArrowDownRight, ArrowUpRight, CheckCircle, X, PlusCircle, FileText, CalendarDays, Calendar, Calendar as CalendarIcon, Moon, Star, Sparkles, Inbox, Layers } from 'lucide-react';
 
 const EXPENSE_REASONS = [
-  'Achat Logistique', 'Location Sono/Matériel', 'Restauration / Alimentation',
-  'Transport', 'Aumône (Hadiya)', 'Frais administratifs', 'Secours social', 
+  'Achat Logistique', 'Location Sono/MatÃ©riel', 'Restauration / Alimentation',
+  'Transport', 'AumÃ´ne (Hadiya)', 'Frais administratifs', 'Secours social', 
   'Magal', 'Gamou', 'Ziaar', 'Autre'
 ];
 
 const INCOME_SOURCES = [
-  'Barkelou', 'Bénéfices Projets/Événements', 'Dons Anonymes', 'Apport Extérieur', 'Autre'
+  'Barkelou', 'BÃ©nÃ©fices Projets/Ã‰vÃ©nements', 'Dons Anonymes', 'Apport ExtÃ©rieur', 'Autre'
 ];
 
 interface MemberPreview {
@@ -57,14 +58,14 @@ export default function Tresorerie() {
   // Data
   const [mixedTransactions, setMixedTransactions] = useState<MixedTransaction[]>([]);
 
-  // Modal State - Décaissement
+  // Modal State - DÃ©caissement
   const [isExpenseModalVisible, setExpenseModalVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [expenseAmount, setExpenseAmount] = useState('');
   const [expenseReason, setExpenseReason] = useState(EXPENSE_REASONS[0]);
   const [expenseBeneficiary, setExpenseBeneficiary] = useState('');
 
-  // Modal State - Encaissement Général
+  // Modal State - Encaissement GÃ©nÃ©ral
   const [isIncomeModalVisible, setIncomeModalVisible] = useState(false);
   const [isIncomeSubmitting, setIsIncomeSubmitting] = useState(false);
   const [incomeAmount, setIncomeAmount] = useState('');
@@ -97,7 +98,7 @@ export default function Tresorerie() {
           target_month: currentMonth,
           target_year: currentYear
         }),
-        supabase.from('sass_contributions').select('id, amount, payment_date, members:member_id(first_name, last_name, sector)').eq('status', 'Validé').order('payment_date', { ascending: false }).limit(15),
+        supabase.from('sass_contributions').select('id, amount, payment_date, members:member_id(first_name, last_name, sector)').eq('status', 'ValidÃ©').order('payment_date', { ascending: false }).limit(15),
         supabase.from('treasury_expenses').select('*').order('expense_date', { ascending: false }).limit(15),
         supabase.from('treasury_incomes').select('*').order('income_date', { ascending: false }).limit(15)
       ]);
@@ -125,7 +126,7 @@ export default function Tresorerie() {
             amount: c.amount,
             date: new Date(c.payment_date),
             title: mem ? `${mem.first_name} ${mem.last_name}` : 'Membre Inconnu',
-            subtitle: `Cotisation Sass • ${mem?.sector || ''}`
+            subtitle: `Cotisation Sass â€¢ ${mem?.sector || ''}`
           });
         });
       }
@@ -138,7 +139,7 @@ export default function Tresorerie() {
             amount: i.amount,
             date: new Date(i.income_date),
             title: i.source,
-            subtitle: `Revenu Libre • ${i.description || 'Sans description'}`
+            subtitle: `Revenu Libre â€¢ ${i.description || 'Sans description'}`
           });
         });
       }
@@ -151,7 +152,7 @@ export default function Tresorerie() {
             amount: e.amount,
             date: new Date(e.expense_date),
             title: e.beneficiary,
-            subtitle: `Décaissement • ${e.reason}`
+            subtitle: `DÃ©caissement â€¢ ${e.reason}`
           });
         });
       }
@@ -160,7 +161,7 @@ export default function Tresorerie() {
       setMixedTransactions(history.slice(0, 15)); 
 
     } catch (error) {
-      console.error("Erreur Trésorerie:", error);
+      console.error("Erreur TrÃ©sorerie:", error);
     } finally {
       if (!silent) setLoading(false);
     }
@@ -180,7 +181,7 @@ export default function Tresorerie() {
       }, 300);
     };
 
-    // S'abonner aux changements en temps réel
+    // S'abonner aux changements en temps rÃ©el
     const channel = supabase.channel('treasury_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'treasury_incomes' }, triggerRefresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'treasury_expenses' }, triggerRefresh)
@@ -207,7 +208,7 @@ export default function Tresorerie() {
   const handleProcessExpense = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!expenseAmount || isNaN(Number(expenseAmount)) || Number(expenseAmount) <= 0) return window.alert("Veuillez entrer un montant valide.");
-    if (!expenseBeneficiary.trim()) return window.alert("Veuillez renseigner le bénéficiaire.");
+    if (!expenseBeneficiary.trim()) return window.alert("Veuillez renseigner le bÃ©nÃ©ficiaire.");
     if (Number(expenseAmount) > totalBalance) return window.alert("Fonds insuffisants !");
     
     try {
@@ -222,21 +223,21 @@ export default function Tresorerie() {
       // LOG ACTIVITY
       await supabase.from('activity_logs').insert([{
         user_email: session?.user?.email || 'Inconnu',
-        action_type: 'CRÉATION',
-        entity_type: 'TRÉSORERIE',
-        details: `Décaissement: ${expenseAmount} F pour ${expenseBeneficiary} (Motif: ${expenseReason})`,
+        action_type: 'CRÃ‰ATION',
+        entity_type: 'TRÃ‰SORERIE',
+        details: `DÃ©caissement: ${expenseAmount} F pour ${expenseBeneficiary} (Motif: ${expenseReason})`,
         sector: 'N/A'
       }]);
       
-      window.alert("Décaissement enregistré !");
+      window.alert("DÃ©caissement enregistrÃ© !");
       fetchTreasuryData();
       setExpenseModalVisible(false); 
       setExpenseAmount(''); 
       setExpenseBeneficiary(''); 
       setExpenseReason(EXPENSE_REASONS[0]);
     } catch (error) { 
-      console.error("Erreur décaissement:", error);
-      window.alert("Erreur décaissement."); 
+      console.error("Erreur dÃ©caissement:", error);
+      window.alert("Erreur dÃ©caissement."); 
     } finally { 
       setIsSubmitting(false); 
     }
@@ -258,13 +259,13 @@ export default function Tresorerie() {
       // LOG ACTIVITY
       await supabase.from('activity_logs').insert([{
         user_email: session?.user?.email || 'Inconnu',
-        action_type: 'CRÉATION',
-        entity_type: 'TRÉSORERIE',
+        action_type: 'CRÃ‰ATION',
+        entity_type: 'TRÃ‰SORERIE',
         details: `Encaissement: ${incomeAmount} F depuis ${incomeSource} (Ref: ${incomeDesc || 'Aucune'})`,
         sector: 'N/A'
       }]);
       
-      window.alert("Encaissement enregistré !");
+      window.alert("Encaissement enregistrÃ© !");
       fetchTreasuryData();
       setIncomeModalVisible(false); 
       setIncomeAmount(''); 
@@ -279,8 +280,8 @@ export default function Tresorerie() {
   };
 
   const MONTHS_FR = [
-    'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
-    'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+    'Janvier', 'FÃ©vrier', 'Mars', 'Avril', 'Mai', 'Juin',
+    'Juillet', 'AoÃ»t', 'Septembre', 'Octobre', 'Novembre', 'DÃ©cembre'
   ];
 
   const getReportDateRange = useCallback(() => {
@@ -296,7 +297,7 @@ export default function Tresorerie() {
       } else {
         const now = new Date();
         const day = now.getDay();
-        // Début de semaine le Samedi 00h00m00s et Fin le Vendredi 23h59m59s
+        // DÃ©but de semaine le Samedi 00h00m00s et Fin le Vendredi 23h59m59s
         // 0: Dim, 1: Lun, 2: Mar, 3: Mer, 4: Jeu, 5: Ven, 6: Sam
         // Pour Samedi (6): diff = 0
         // Pour Dimanche (0): diff = 1
@@ -314,7 +315,7 @@ export default function Tresorerie() {
           end.setDate(currentSaturday.getDate() + 6);
           end.setHours(23, 59, 59, 999);
         } else if (reportWeekPreset === 'prev1') {
-          // Semaine passée (-1)
+          // Semaine passÃ©e (-1)
           start.setDate(currentSaturday.getDate() - 7);
           end = new Date(start);
           end.setDate(start.getDate() + 6);
@@ -352,7 +353,7 @@ export default function Tresorerie() {
       return {
         startDate: new Date(0),
         endDate: new Date(),
-        dateText: `Toutes les dépenses enregistrées pour le ${reportType}`
+        dateText: `Toutes les dÃ©penses enregistrÃ©es pour le ${reportType}`
       };
     }
   }, [reportType, reportWeekPreset, customWeekStart, customWeekEnd, reportMonth, reportYear]);
@@ -413,7 +414,7 @@ export default function Tresorerie() {
               .select('id, amount, payment_date, sass_type, members:member_id(first_name, last_name, sector)')
               .gte('payment_date', startDateStr)
               .lte('payment_date', endDateStr)
-              .eq('status', 'Validé'),
+              .eq('status', 'ValidÃ©'),
             supabase
               .from('treasury_incomes')
               .select('id, amount, income_date, source, description')
@@ -430,7 +431,7 @@ export default function Tresorerie() {
           const safeGenIncomes = genIncomesRes.data || [];
           const safeExpenses = expensesRes.data || [];
 
-          // 1. Synthèse des Cotisations Sass par Secteur et par Rubrique
+          // 1. SynthÃ¨se des Cotisations Sass par Secteur et par Rubrique
           const sectorGroupMap: Record<string, {
             total: number;
             count: number;
@@ -443,8 +444,8 @@ export default function Tresorerie() {
             totalSass += amt;
 
             const mem = c.members as unknown as { sector?: string } | null;
-            const sector = mem?.sector?.trim() || 'Non attribué';
-            const rubric = c.sass_type?.trim() || 'Général';
+            const sector = mem?.sector?.trim() || 'Non attribuÃ©';
+            const rubric = c.sass_type?.trim() || 'GÃ©nÃ©ral';
 
             if (!sectorGroupMap[sector]) {
               sectorGroupMap[sector] = { total: 0, count: 0, rubrics: {} };
@@ -474,13 +475,13 @@ export default function Tresorerie() {
             }))
             .sort((a, b) => b.totalSector - a.totalSector);
 
-          // 2. Synthèse des Autres Entrées (Barkelou, Projets...)
+          // 2. SynthÃ¨se des Autres EntrÃ©es (Barkelou, Projets...)
           const incomeGroupMap: Record<string, { amount: number; count: number }> = {};
           let totalGenInc = 0;
           safeGenIncomes.forEach((i: any) => {
             const amt = Number(i.amount) || 0;
             totalGenInc += amt;
-            const src = i.source?.trim() || 'Autre entrée';
+            const src = i.source?.trim() || 'Autre entrÃ©e';
             if (!incomeGroupMap[src]) incomeGroupMap[src] = { amount: 0, count: 0 };
             incomeGroupMap[src].amount += amt;
             incomeGroupMap[src].count += 1;
@@ -489,7 +490,7 @@ export default function Tresorerie() {
             .map(([name, data]) => ({ name, amount: data.amount, count: data.count }))
             .sort((a, b) => b.amount - a.amount);
 
-          // 3. Synthèse des Décaissements / Dépenses
+          // 3. SynthÃ¨se des DÃ©caissements / DÃ©penses
           const expGroupMap: Record<string, { amount: number; count: number }> = {};
           let totalExp = 0;
           safeExpenses.forEach((e: any) => {
@@ -517,7 +518,7 @@ export default function Tresorerie() {
           }
         }
       } catch (err) {
-        console.error('Erreur chargement aperçu rapport trésorerie:', err);
+        console.error('Erreur chargement aperÃ§u rapport trÃ©sorerie:', err);
         if (isMounted) setReportLoading(false);
       }
     }
@@ -531,9 +532,10 @@ export default function Tresorerie() {
   const generatePDF = async () => {
     if (isGeneratingPDF) return;
     setIsGeneratingPDF(true);
+    const targetWindow = createPrintWindow(); // ← Synchrone, dans le même tick du clic Safari
     try {
       const isEventReport = reportType === 'Magal' || reportType === 'Gamou' || reportType === 'Ziaar';
-      const title = isEventReport ? `Bilan des Dépenses - ${reportType}` : (reportType === 'hebdo' ? 'Bilan Hebdomadaire' : 'Bilan Mensuel');
+      const title = isEventReport ? `Bilan des DÃ©penses - ${reportType}` : (reportType === 'hebdo' ? 'Bilan Hebdomadaire' : 'Bilan Mensuel');
       
       const { startDate, endDate, dateText } = getReportDateRange();
       const startDateStr = startDate.toISOString();
@@ -581,23 +583,23 @@ export default function Tresorerie() {
             </head>
             <body>
               <div class="header">
-                <h1 class="title">Trésorerie Générale - DMK</h1>
-                <p class="subtitle">Bilan des Décaissements Événementiels</p>
+                <h1 class="title">TrÃ©sorerie GÃ©nÃ©rale - DMK</h1>
+                <p class="subtitle">Bilan des DÃ©caissements Ã‰vÃ©nementiels</p>
               </div>
               <h2>${title}</h2>
               <div class="date-text">${dateText}</div>
               <div class="summary-box">
-                <div class="sum-label">Total des Dépenses de l'Événement</div>
+                <div class="sum-label">Total des DÃ©penses de l'Ã‰vÃ©nement</div>
                 <div class="sum-val">${totalExp.toLocaleString('fr-FR')} FCFA</div>
               </div>
               ${totalExp > 0 ? `
                 <table>
-                  <thead><tr><th>Date</th><th>Bénéficiaire / Description</th><th style="text-align:right;">Montant</th></tr></thead>
+                  <thead><tr><th>Date</th><th>BÃ©nÃ©ficiaire / Description</th><th style="text-align:right;">Montant</th></tr></thead>
                   <tbody>${expenseRows}</tbody>
                 </table>
-              ` : '<p style="text-align:center; color:#64748b; padding: 40px;">Aucune dépense enregistrée pour cet événement.</p>'}
+              ` : '<p style="text-align:center; color:#64748b; padding: 40px;">Aucune dÃ©pense enregistrÃ©e pour cet Ã©vÃ©nement.</p>'}
               <div class="footer">
-                Généré le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}
+                GÃ©nÃ©rÃ© le ${new Date().toLocaleDateString('fr-FR')} Ã  ${new Date().toLocaleTimeString('fr-FR')}
               </div>
               <script>
                 window.onload = function() { window.print(); }
@@ -611,7 +613,7 @@ export default function Tresorerie() {
           .select('*, members:member_id(sector)')
           .gte('payment_date', startDateStr)
           .lte('payment_date', endDateStr)
-          .eq('status', 'Validé');
+          .eq('status', 'ValidÃ©');
         const { data: genIncomes } = await supabase
           .from('treasury_incomes')
           .select('*')
@@ -627,7 +629,7 @@ export default function Tresorerie() {
         const safeGenIncomes = genIncomes || [];
         const safeExpenses = expenses || [];
 
-        // 1. Synthèse des Cotisations Sass par Secteur et par Rubrique
+        // 1. SynthÃ¨se des Cotisations Sass par Secteur et par Rubrique
         const pdfSectorGroupMap: Record<string, {
           total: number;
           count: number;
@@ -640,8 +642,8 @@ export default function Tresorerie() {
           totalSass += amt;
 
           const mem = c.members as unknown as MemberPreview | null;
-          const sector = mem?.sector?.trim() || 'Non attribué';
-          const rubric = c.sass_type?.trim() || 'Général';
+          const sector = mem?.sector?.trim() || 'Non attribuÃ©';
+          const rubric = c.sass_type?.trim() || 'GÃ©nÃ©ral';
 
           if (!pdfSectorGroupMap[sector]) {
             pdfSectorGroupMap[sector] = { total: 0, count: 0, rubrics: {} };
@@ -662,11 +664,11 @@ export default function Tresorerie() {
         sortedPdfSectors.forEach(([sector, sData]) => {
           const sortedRubrics = Object.entries(sData.rubrics).sort((a, b) => b[1].amount - a[1].amount);
           
-          // Ligne d'en-tête de secteur avec sous-total
+          // Ligne d'en-tÃªte de secteur avec sous-total
           sectorRubricRows += `
             <tr style="background-color: #f1f5f9; font-weight: bold; border-top: 2px solid #cbd5e1;">
               <td colspan="2" style="color: #1e3a8a; font-size: 13px; padding: 10px 12px;">
-                🏛️ Secteur : ${sector} (${sData.count} cotisations)
+                ðŸ›ï¸ Secteur : ${sector} (${sData.count} cotisations)
               </td>
               <td style="text-align: right; color: #1e3a8a; font-size: 13px; font-weight: bold; padding: 10px 12px;">
                 ${sData.total.toLocaleString('fr-FR')} F
@@ -734,14 +736,14 @@ export default function Tresorerie() {
             </head>
             <body>
               <div class="header">
-                <h1 class="title">Trésorerie Générale - DMK</h1>
+                <h1 class="title">TrÃ©sorerie GÃ©nÃ©rale - DMK</h1>
                 <p class="subtitle">Rapport Financier Officiel</p>
               </div>
               <h2>${title}</h2>
-              <div class="date-text">Période : ${dateText}</div>
+              <div class="date-text">PÃ©riode : ${dateText}</div>
               <div class="summary-box">
                 <div class="sum-item">
-                  <div class="sum-label">Total Entrées</div>
+                  <div class="sum-label">Total EntrÃ©es</div>
                   <div class="sum-val val-in">+ ${(totalSass + totalGenInc).toLocaleString('fr-FR')} F</div>
                 </div>
                 <div class="sum-item">
@@ -759,14 +761,14 @@ export default function Tresorerie() {
                   <thead>
                     <tr>
                       <th>Secteur / Rubrique</th>
-                      <th style="text-align:center;">Détail</th>
-                      <th style="text-align:right;">Montant Collecté</th>
+                      <th style="text-align:center;">DÃ©tail</th>
+                      <th style="text-align:right;">Montant CollectÃ©</th>
                     </tr>
                   </thead>
                   <tbody>${sectorRubricRows}</tbody>
                   <tfoot>
                     <tr style="background-color: #e2e8f0; font-weight: bold;">
-                      <td colspan="2" style="padding: 10px; text-transform: uppercase;">Total Général Cotisations Sass :</td>
+                      <td colspan="2" style="padding: 10px; text-transform: uppercase;">Total GÃ©nÃ©ral Cotisations Sass :</td>
                       <td style="text-align: right; padding: 10px; color: #16a34a; font-size: 14px;">+ ${totalSass.toLocaleString('fr-FR')} F</td>
                     </tr>
                   </tfoot>
@@ -775,20 +777,20 @@ export default function Tresorerie() {
               ${totalGenInc > 0 ? `
                 <div class="table-title">2. Revenus Libres (Barkelou, Projets...)</div>
                 <table>
-                  <thead><tr><th>Catégorie</th><th style="text-align:right;">Montant</th></tr></thead>
+                  <thead><tr><th>CatÃ©gorie</th><th style="text-align:right;">Montant</th></tr></thead>
                   <tbody>${incomeRows}</tbody>
                 </table>
               ` : ''}
               ${totalExp > 0 ? `
-                <div class="table-title">3. Décaissements (Dépenses)</div>
+                <div class="table-title">3. DÃ©caissements (DÃ©penses)</div>
                 <table>
                   <thead><tr><th>Motif</th><th style="text-align:right;">Montant</th></tr></thead>
                   <tbody>${expenseRows}</tbody>
                 </table>
               ` : ''}
-              ${(totalSass === 0 && totalGenInc === 0 && totalExp === 0) ? '<p style="text-align:center; color:#64748b; padding: 40px;">Aucune transaction durant cette période.</p>' : ''}
+              ${(totalSass === 0 && totalGenInc === 0 && totalExp === 0) ? '<p style="text-align:center; color:#64748b; padding: 40px;">Aucune transaction durant cette pÃ©riode.</p>' : ''}
               <div class="footer">
-                Généré le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}
+                GÃ©nÃ©rÃ© le ${new Date().toLocaleDateString('fr-FR')} Ã  ${new Date().toLocaleTimeString('fr-FR')}
               </div>
               <script>
                 window.onload = function() { window.print(); }
@@ -798,17 +800,12 @@ export default function Tresorerie() {
         `;
       }
 
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        printWindow.document.write(htmlContent);
-        printWindow.document.close();
-      } else {
-        window.alert("Veuillez autoriser l'ouverture de pop-ups pour imprimer le rapport.");
-      }
+      printDocument(htmlContent, targetWindow);
       setReportModalVisible(false);
     } catch (error) {
+      if (targetWindow && !targetWindow.closed) targetWindow.close();
       console.error("Erreur PDF:", error);
-      window.alert("Impossible de générer le rapport.");
+      window.alert("Impossible de gÃ©nÃ©rer le rapport.");
     } finally {
       setIsGeneratingPDF(false);
     }
@@ -835,8 +832,8 @@ export default function Tresorerie() {
   return (
     <div className="flex flex-col relative z-10 pb-40 md:pb-8">
       <div className="p-6 md:p-8 pb-4">
-        <h1 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tight transition-colors">Trésorerie</h1>
-        <p className="text-slate-500 dark:text-slate-400 mt-1 font-medium md:text-lg transition-colors">Supervision Financière</p>
+        <h1 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tight transition-colors">TrÃ©sorerie</h1>
+        <p className="text-slate-500 dark:text-slate-400 mt-1 font-medium md:text-lg transition-colors">Supervision FinanciÃ¨re</p>
       </div>
 
       <div className="flex-1 px-4 md:px-8 max-w-4xl w-full mx-auto space-y-8">
@@ -845,13 +842,13 @@ export default function Tresorerie() {
         <div className="rounded-[32px] bg-gradient-to-br from-slate-800 to-slate-950 dark:from-slate-900 dark:to-black p-6 md:p-8 shadow-xl shadow-slate-900/20 text-white relative overflow-hidden transition-all hover:shadow-2xl border border-slate-700/50">
           <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10 blur-3xl animate-pulse"></div>
           
-          <p className="text-slate-400 text-sm font-bold uppercase tracking-wider mb-2 relative z-10">Solde Global Caisse Réel</p>
+          <p className="text-slate-400 text-sm font-bold uppercase tracking-wider mb-2 relative z-10">Solde Global Caisse RÃ©el</p>
           <div className="text-4xl md:text-5xl font-black tracking-tight mb-4 relative z-10 drop-shadow-sm">
             {formatMoney(totalBalance)} <span className="text-xl text-slate-400 opacity-80">FCFA</span>
           </div>
           <div className="inline-flex items-center gap-2 rounded-full bg-slate-800/80 px-3 py-1.5 border border-slate-700/50 relative z-10 shadow-inner">
             <CheckCircle size={14} className="text-green-400" />
-            <span className="text-xs font-bold text-green-300">Synchronisé en temps réel</span>
+            <span className="text-xs font-bold text-green-300">SynchronisÃ© en temps rÃ©el</span>
           </div>
         </div>
 
@@ -868,7 +865,7 @@ export default function Tresorerie() {
             <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-[20px] bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400 shadow-inner group-hover:scale-110 transition-transform">
               <ArrowUpRight size={26} />
             </div>
-            <p className="text-sm font-bold text-slate-500 dark:text-slate-400 mb-1 transition-colors">Total Décaissements</p>
+            <p className="text-sm font-bold text-slate-500 dark:text-slate-400 mb-1 transition-colors">Total DÃ©caissements</p>
             <p className="text-2xl font-black text-red-600 dark:text-red-400 transition-colors">-{formatMoney(monthExpenses)}</p>
           </div>
         </div>
@@ -886,7 +883,7 @@ export default function Tresorerie() {
               </div>
               <div className="text-left">
                 <h3 className="text-lg font-black text-slate-900 dark:text-white transition-colors">Nouvel Encaissement</h3>
-                <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-0.5 transition-colors">Barkelou, Bénéfices, Dons, etc.</p>
+                <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-0.5 transition-colors">Barkelou, BÃ©nÃ©fices, Dons, etc.</p>
               </div>
             </button>
             
@@ -898,7 +895,7 @@ export default function Tresorerie() {
                 <DollarSign size={30} />
               </div>
               <div className="text-left">
-                <h3 className="text-lg font-black text-slate-900 dark:text-white transition-colors">Nouveau Décaissement</h3>
+                <h3 className="text-lg font-black text-slate-900 dark:text-white transition-colors">Nouveau DÃ©caissement</h3>
                 <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-0.5 transition-colors">Enregistrer une sortie de caisse</p>
               </div>
             </button>
@@ -907,7 +904,7 @@ export default function Tresorerie() {
 
         {/* RAPPORTS PERIODIQUES */}
         <div>
-          <h2 className="mb-5 ml-2 text-xl font-black text-slate-900 dark:text-white tracking-tight transition-colors">Rapports Périodiques</h2>
+          <h2 className="mb-5 ml-2 text-xl font-black text-slate-900 dark:text-white tracking-tight transition-colors">Rapports PÃ©riodiques</h2>
           <div className="flex flex-col sm:flex-row gap-4">
             <button 
               onClick={() => { setReportType('hebdo'); setReportModalVisible(true); }}
@@ -932,7 +929,7 @@ export default function Tresorerie() {
 
         {/* RAPPORTS EVENEMENTIELS */}
         <div>
-          <h2 className="mb-5 ml-2 text-xl font-black text-slate-900 dark:text-white tracking-tight transition-colors">Rapports Événementiels</h2>
+          <h2 className="mb-5 ml-2 text-xl font-black text-slate-900 dark:text-white tracking-tight transition-colors">Rapports Ã‰vÃ©nementiels</h2>
           <div className="flex flex-col sm:flex-row gap-4">
             <button onClick={() => { setReportType('Magal'); setReportModalVisible(true); }} className="flex-1 rounded-[24px] border border-white/50 dark:border-slate-700/50 bg-white/60 dark:bg-slate-900/50 p-5 text-center shadow-lg shadow-slate-200/30 dark:shadow-slate-900/30 transition-all hover:-translate-y-1 hover:shadow-xl hover:border-amber-200/50 hover:bg-amber-50/50 dark:hover:bg-amber-900/20 group">
               <Star size={28} className="mx-auto mb-3 text-amber-600 dark:text-amber-400 group-hover:scale-110 transition-transform drop-shadow-sm" />
@@ -951,10 +948,10 @@ export default function Tresorerie() {
 
         {/* HISTORIQUE OPERATIONS */}
         <div>
-          <h2 className="mb-5 ml-2 text-xl font-black text-slate-900 dark:text-white tracking-tight transition-colors">Dernières Opérations</h2>
+          <h2 className="mb-5 ml-2 text-xl font-black text-slate-900 dark:text-white tracking-tight transition-colors">DerniÃ¨res OpÃ©rations</h2>
           {mixedTransactions.length === 0 ? (
             <div className="rounded-[32px] border-2 border-dashed border-slate-200/50 dark:border-slate-700/50 bg-white/50 dark:bg-slate-800/50 p-10 text-center font-bold text-slate-500 dark:text-slate-400 transition-colors">
-              Aucune opération enregistrée.
+              Aucune opÃ©ration enregistrÃ©e.
             </div>
           ) : (
             <div className="space-y-3">
@@ -966,7 +963,7 @@ export default function Tresorerie() {
                   <div className="flex-1 min-w-0">
                     <h4 className="font-black text-slate-900 dark:text-white truncate text-base transition-colors">{tx.title}</h4>
                     <p className="text-xs font-bold text-slate-500 dark:text-slate-400 truncate mt-1 tracking-wide transition-colors">
-                      {formatDate(tx.date)} • {tx.subtitle}
+                      {formatDate(tx.date)} â€¢ {tx.subtitle}
                     </p>
                   </div>
                   <div className={`text-right font-black whitespace-nowrap text-lg ${tx.type === 'income' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'} transition-colors`}>
@@ -992,7 +989,7 @@ export default function Tresorerie() {
             
             <form onSubmit={handleProcessIncome} className="p-6 pt-4 space-y-6 overflow-y-auto max-h-[75vh] custom-scrollbar">
               <div>
-                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 ml-1">Montant reçu (FCFA)</label>
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 ml-1">Montant reÃ§u (FCFA)</label>
                 <input type="number" required value={incomeAmount} onChange={e => setIncomeAmount(e.target.value)} placeholder="Ex: 25000" className="w-full rounded-2xl border border-emerald-200/50 dark:border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-900/20 px-4 py-4 text-center text-3xl font-black text-emerald-700 dark:text-emerald-400 focus:border-emerald-500 focus:outline-none focus:ring-4 focus:ring-emerald-500/20 placeholder:text-emerald-300 dark:placeholder:text-emerald-700 transition-all shadow-inner" />
               </div>
 
@@ -1026,7 +1023,7 @@ export default function Tresorerie() {
                 className="mt-8 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-4 text-base font-bold text-white shadow-xl shadow-emerald-600/30 transition-all hover:bg-emerald-700 disabled:opacity-70 active:scale-95"
               >
                 {isIncomeSubmitting ? <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white"></div> : <CheckCircle size={20} />}
-                {isIncomeSubmitting ? 'Traitement...' : 'Valider l\'entrée'}
+                {isIncomeSubmitting ? 'Traitement...' : 'Valider l\'entrÃ©e'}
               </button>
             </form>
           </div>
@@ -1038,7 +1035,7 @@ export default function Tresorerie() {
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/60 dark:bg-black/60 p-0 sm:p-4 backdrop-blur-md">
           <div className="w-full sm:max-w-md bg-white/90 dark:bg-slate-900/90 border border-white/20 dark:border-slate-700/50 rounded-t-[32px] sm:rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-10 duration-300">
             <div className="flex items-center justify-between border-b border-slate-200/50 dark:border-slate-800/50 p-6 pb-4">
-              <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">Nouveau Décaissement</h3>
+              <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">Nouveau DÃ©caissement</h3>
               <button onClick={() => setExpenseModalVisible(false)} className="rounded-full bg-slate-100/50 dark:bg-slate-800/50 p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
                 <X size={20} />
               </button>
@@ -1046,12 +1043,12 @@ export default function Tresorerie() {
             
             <form onSubmit={handleProcessExpense} className="p-6 pt-4 space-y-6 overflow-y-auto max-h-[75vh] custom-scrollbar">
               <div>
-                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 ml-1">Montant à retirer (FCFA)</label>
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 ml-1">Montant Ã  retirer (FCFA)</label>
                 <input type="number" required value={expenseAmount} onChange={e => setExpenseAmount(e.target.value)} placeholder="Ex: 50000" className="w-full rounded-2xl border border-red-200/50 dark:border-red-500/30 bg-red-50/50 dark:bg-red-900/20 px-4 py-4 text-center text-3xl font-black text-red-700 dark:text-red-400 focus:border-red-500 focus:outline-none focus:ring-4 focus:ring-red-500/20 placeholder:text-red-300 dark:placeholder:text-red-700 transition-all shadow-inner" />
               </div>
 
               <div>
-                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-3 ml-1">Motif de la dépense</label>
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-3 ml-1">Motif de la dÃ©pense</label>
                 <div className="flex flex-wrap gap-2">
                   {EXPENSE_REASONS.map(reason => (
                     <button
@@ -1070,7 +1067,7 @@ export default function Tresorerie() {
               </div>
 
               <div>
-                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 ml-1">Bénéficiaire (Nom / Structure)</label>
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 ml-1">BÃ©nÃ©ficiaire (Nom / Structure)</label>
                 <input type="text" required value={expenseBeneficiary} onChange={e => setExpenseBeneficiary(e.target.value)} placeholder="Ex: Abdoulaye Ndiaye (Transport)" className="w-full rounded-2xl border border-slate-200/50 dark:border-slate-700/50 bg-white/50 dark:bg-slate-800/50 px-4 py-4 text-base font-bold text-slate-900 dark:text-white focus:border-blue-500 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/20 placeholder:text-slate-400 dark:placeholder:text-slate-600 transition-all" />
               </div>
 
@@ -1087,7 +1084,7 @@ export default function Tresorerie() {
         </div>
       )}
 
-      {/* MODAL RAPPORTS VISUEL & SÉLECTION SEMAINE / MOIS */}
+      {/* MODAL RAPPORTS VISUEL & SÃ‰LECTION SEMAINE / MOIS */}
       {isReportModalVisible && (
         <div className="fixed inset-0 z-[9999] flex items-start sm:items-center justify-center bg-slate-950/80 p-2 sm:p-4 pt-3 sm:pt-4 backdrop-blur-md overflow-hidden">
           <div className="w-full max-w-xl max-h-[85vh] sm:max-h-[90vh] flex flex-col bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-[28px] sm:rounded-[32px] shadow-2xl p-4 sm:p-7 animate-in zoom-in-95 duration-200 overflow-hidden my-auto">
@@ -1096,9 +1093,9 @@ export default function Tresorerie() {
               <div>
                 <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">Rapport Financier</h3>
                 <p className="text-xs font-bold text-slate-500 dark:text-slate-400 mt-0.5">
-                  {reportType === 'hebdo' && 'Édition Hebdomadaire • DMK'}
-                  {reportType === 'mensuel' && 'Édition Mensuelle • DMK'}
-                  {(reportType === 'Magal' || reportType === 'Gamou' || reportType === 'Ziaar') && `Bilan Décaissements - ${reportType}`}
+                  {reportType === 'hebdo' && 'Ã‰dition Hebdomadaire â€¢ DMK'}
+                  {reportType === 'mensuel' && 'Ã‰dition Mensuelle â€¢ DMK'}
+                  {(reportType === 'Magal' || reportType === 'Gamou' || reportType === 'Ziaar') && `Bilan DÃ©caissements - ${reportType}`}
                 </p>
               </div>
               <button 
@@ -1111,9 +1108,9 @@ export default function Tresorerie() {
               </button>
             </div>
 
-            {/* Corps déroulant du modal */}
+            {/* Corps dÃ©roulant du modal */}
             <div className="overflow-y-auto pr-1 -mr-1 flex-1 space-y-4">
-              {/* Switch rapide entre Hebdo / Mensuel pour rapports généraux */}
+              {/* Switch rapide entre Hebdo / Mensuel pour rapports gÃ©nÃ©raux */}
               {(reportType === 'hebdo' || reportType === 'mensuel') && (
                 <div className="flex p-1 bg-slate-100 dark:bg-slate-800/80 rounded-2xl border border-slate-200/50 dark:border-slate-700/50">
                   <button
@@ -1143,7 +1140,7 @@ export default function Tresorerie() {
                 </div>
               )}
 
-              {/* Sélecteur de période selon le type de rapport */}
+              {/* SÃ©lecteur de pÃ©riode selon le type de rapport */}
               {reportType === 'hebdo' && (
                 <div className="space-y-2.5">
                   <label className="block text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -1152,7 +1149,7 @@ export default function Tresorerie() {
                   <div className="grid grid-cols-2 gap-2">
                     {[
                       { id: 'current', label: 'Cette semaine' },
-                      { id: 'prev1', label: 'Semaine passée (-1)' },
+                      { id: 'prev1', label: 'Semaine passÃ©e (-1)' },
                       { id: 'prev2', label: 'Il y a 2 semaines' },
                       { id: 'custom', label: 'Dates libres' },
                     ].map((preset) => (
@@ -1174,7 +1171,7 @@ export default function Tresorerie() {
                   {reportWeekPreset === 'custom' && (
                     <div className="grid grid-cols-2 gap-3 pt-1 animate-in fade-in-50 duration-200">
                       <div>
-                        <span className="block text-[11px] font-bold text-slate-500 mb-1">Date début</span>
+                        <span className="block text-[11px] font-bold text-slate-500 mb-1">Date dÃ©but</span>
                         <input
                           type="date"
                           value={customWeekStart}
@@ -1199,7 +1196,7 @@ export default function Tresorerie() {
               {reportType === 'mensuel' && (
                 <div className="space-y-2.5">
                   <label className="block text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    Choisir le mois et l'année
+                    Choisir le mois et l'annÃ©e
                   </label>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
@@ -1215,7 +1212,7 @@ export default function Tresorerie() {
                       </select>
                     </div>
                     <div>
-                      <span className="block text-[11px] font-bold text-slate-500 mb-1">Année</span>
+                      <span className="block text-[11px] font-bold text-slate-500 mb-1">AnnÃ©e</span>
                       <select
                         value={reportYear}
                         onChange={(e) => setReportYear(Number(e.target.value))}
@@ -1230,32 +1227,32 @@ export default function Tresorerie() {
                 </div>
               )}
 
-              {/* Badge récapitulatif de la période */}
+              {/* Badge rÃ©capitulatif de la pÃ©riode */}
               <div className="rounded-2xl border border-blue-200/50 dark:border-blue-900/40 bg-blue-50/50 dark:bg-blue-950/30 p-3 flex items-center gap-3">
                 <CalendarDays className="text-blue-600 dark:text-blue-400 shrink-0" size={18} />
                 <div className="text-xs">
-                  <span className="font-bold text-slate-500 dark:text-slate-400 block text-[10px] uppercase tracking-wider">Période du document</span>
+                  <span className="font-bold text-slate-500 dark:text-slate-400 block text-[10px] uppercase tracking-wider">PÃ©riode du document</span>
                   <span className="font-black text-slate-800 dark:text-slate-200">{getReportDateRange().dateText}</span>
                 </div>
               </div>
 
-              {/* ─── RÉCAPITULATIF EN DIRECT ─── */}
+              {/* â”€â”€â”€ RÃ‰CAPITULATIF EN DIRECT â”€â”€â”€ */}
               <div className="space-y-3 pt-1">
                 <div className="flex items-center gap-2">
                   <div className={`w-1 h-4 rounded-full ${reportType === 'hebdo' ? 'bg-blue-600' : reportType === 'mensuel' ? 'bg-amber-600' : 'bg-red-600'}`}></div>
-                  <h4 className="text-sm font-black text-slate-900 dark:text-white">Récapitulatif Financier</h4>
+                  <h4 className="text-sm font-black text-slate-900 dark:text-white">RÃ©capitulatif Financier</h4>
                 </div>
 
                 {reportLoading ? (
                   <div className="flex items-center justify-center p-8 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200/50 dark:border-slate-800/50">
                     <div className="h-6 w-6 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"></div>
-                    <span className="ml-3 text-xs font-bold text-slate-500 dark:text-slate-400">Calcul des données financières...</span>
+                    <span className="ml-3 text-xs font-bold text-slate-500 dark:text-slate-400">Calcul des donnÃ©es financiÃ¨res...</span>
                   </div>
                 ) : (reportType === 'Magal' || reportType === 'Gamou' || reportType === 'Ziaar') ? (
-                  /* Bilan Événementiel */
+                  /* Bilan Ã‰vÃ©nementiel */
                   <div className="space-y-3">
                     <div className="p-4 rounded-2xl bg-red-50 dark:bg-red-950/30 border border-red-200/50 dark:border-red-900/40">
-                      <span className="block text-[10px] font-black uppercase tracking-wider text-red-700 dark:text-red-400">Total Dépenses Engagées</span>
+                      <span className="block text-[10px] font-black uppercase tracking-wider text-red-700 dark:text-red-400">Total DÃ©penses EngagÃ©es</span>
                       <span className="block text-xl font-black text-red-700 dark:text-red-300 mt-1">
                         {previewTotalExpenses.toLocaleString('fr-FR')} FCFA
                       </span>
@@ -1264,21 +1261,21 @@ export default function Tresorerie() {
                     <div className="rounded-2xl border border-slate-200/60 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-800/30 overflow-hidden">
                       <div className="px-3.5 py-2 border-b border-slate-200/60 dark:border-slate-800/80 flex items-center justify-between">
                         <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                          Décaissements ({previewEventExpenses.length})
+                          DÃ©caissements ({previewEventExpenses.length})
                         </span>
                       </div>
                       {previewEventExpenses.length === 0 ? (
                         <div className="p-6 text-center text-slate-400 dark:text-slate-500 text-xs font-bold flex flex-col items-center justify-center gap-2">
                           <Inbox size={24} className="opacity-50" />
-                          <span>Aucune dépense enregistrée pour cet événement</span>
+                          <span>Aucune dÃ©pense enregistrÃ©e pour cet Ã©vÃ©nement</span>
                         </div>
                       ) : (
                         <div className="max-h-44 overflow-y-auto divide-y divide-slate-200/40 dark:divide-slate-800/40">
                           {previewEventExpenses.map((e) => (
                             <div key={e.id} className="p-2.5 px-3.5 flex items-center justify-between text-xs hover:bg-slate-100/50 dark:hover:bg-slate-800/50 transition-colors">
                               <div className="min-w-0 pr-2">
-                                <p className="font-bold text-slate-900 dark:text-white truncate">{e.beneficiary || 'Sans bénéficiaire'}</p>
-                                <p className="text-[10px] text-slate-500 dark:text-slate-400">{e.description || reportType} • {new Date(e.expense_date).toLocaleDateString('fr-FR')}</p>
+                                <p className="font-bold text-slate-900 dark:text-white truncate">{e.beneficiary || 'Sans bÃ©nÃ©ficiaire'}</p>
+                                <p className="text-[10px] text-slate-500 dark:text-slate-400">{e.description || reportType} â€¢ {new Date(e.expense_date).toLocaleDateString('fr-FR')}</p>
                               </div>
                               <span className="font-black text-red-600 dark:text-red-400 shrink-0">
                                 -{Number(e.amount).toLocaleString('fr-FR')} F
@@ -1290,12 +1287,12 @@ export default function Tresorerie() {
                     </div>
                   </div>
                 ) : (
-                  /* Bilan Périodique (Hebdo / Mensuel) */
+                  /* Bilan PÃ©riodique (Hebdo / Mensuel) */
                   <>
                     {/* 3 Cartes KPIs */}
                     <div className="grid grid-cols-3 gap-2 sm:gap-3">
                       <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/50 dark:border-emerald-900/40">
-                        <span className="block text-[9px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Entrées</span>
+                        <span className="block text-[9px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400">EntrÃ©es</span>
                         <span className="block text-sm sm:text-base font-black text-emerald-800 dark:text-emerald-300 mt-0.5">
                           +{previewTotalEntries.toLocaleString('fr-FR')} F
                         </span>
@@ -1324,14 +1321,14 @@ export default function Tresorerie() {
                       </div>
                     </div>
 
-                    {/* Pills Détails Global */}
+                    {/* Pills DÃ©tails Global */}
                     <div className="flex flex-wrap gap-1.5 pt-1">
                       <span className="inline-flex items-center px-2.5 py-1 rounded-xl text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/50 dark:border-slate-700/50">
                         Sass : <strong className="ml-1 text-slate-900 dark:text-white">{previewTotalSass.toLocaleString('fr-FR')} F</strong>
                       </span>
                       {previewTotalGenInc > 0 && (
                         <span className="inline-flex items-center px-2.5 py-1 rounded-xl text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/50 dark:border-slate-700/50">
-                          Autres entrées : <strong className="ml-1 text-slate-900 dark:text-white">{previewTotalGenInc.toLocaleString('fr-FR')} F</strong>
+                          Autres entrÃ©es : <strong className="ml-1 text-slate-900 dark:text-white">{previewTotalGenInc.toLocaleString('fr-FR')} F</strong>
                         </span>
                       )}
                       {previewExpenseSummaries.slice(0, 3).map((exp) => (
@@ -1344,7 +1341,7 @@ export default function Tresorerie() {
                       ))}
                     </div>
 
-                    {/* ─── 1. SYNTHÈSE DES COTISATIONS SASS PAR SECTEUR & PAR RUBRIQUE ─── */}
+                    {/* â”€â”€â”€ 1. SYNTHÃˆSE DES COTISATIONS SASS PAR SECTEUR & PAR RUBRIQUE â”€â”€â”€ */}
                     <div className="rounded-2xl border border-slate-200/60 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-800/30 overflow-hidden space-y-0">
                       <div className="px-3.5 py-2.5 bg-blue-50/50 dark:bg-blue-950/20 border-b border-slate-200/60 dark:border-slate-800/80 flex items-center justify-between">
                         <div className="flex items-center gap-2">
@@ -1361,13 +1358,13 @@ export default function Tresorerie() {
                       {previewSectorSummaries.length === 0 ? (
                         <div className="p-6 text-center text-slate-400 dark:text-slate-500 text-xs font-bold flex flex-col items-center justify-center gap-2">
                           <Inbox size={24} className="opacity-50" />
-                          <span>Aucune cotisation Sass enregistrée sur cette période</span>
+                          <span>Aucune cotisation Sass enregistrÃ©e sur cette pÃ©riode</span>
                         </div>
                       ) : (
                         <div className="max-h-56 overflow-y-auto divide-y divide-slate-200/50 dark:divide-slate-800/50 p-2 space-y-2">
                           {previewSectorSummaries.map((s) => (
                             <div key={s.sector} className="p-2.5 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-slate-200/40 dark:border-slate-700/40 shadow-xs">
-                              {/* En-tête Secteur */}
+                              {/* En-tÃªte Secteur */}
                               <div className="flex items-center justify-between pb-1.5 border-b border-slate-100 dark:border-slate-800">
                                 <span className="font-black text-xs text-slate-900 dark:text-white flex items-center gap-1.5">
                                   <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
@@ -1378,7 +1375,7 @@ export default function Tresorerie() {
                                   {s.totalSector.toLocaleString('fr-FR')} F
                                 </span>
                               </div>
-                              {/* Détail par Rubrique */}
+                              {/* DÃ©tail par Rubrique */}
                               <div className="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                                 {s.rubrics.map((r) => (
                                   <div key={r.rubric} className="flex items-center justify-between text-[11px] bg-slate-50 dark:bg-slate-800/50 px-2.5 py-1 rounded-lg">
@@ -1397,13 +1394,13 @@ export default function Tresorerie() {
                       )}
                     </div>
 
-                    {/* ─── 2. AUTRES ENTRÉES TRÉSORERIE (BARKELOU, PROJETS...) ─── */}
+                    {/* â”€â”€â”€ 2. AUTRES ENTRÃ‰ES TRÃ‰SORERIE (BARKELOU, PROJETS...) â”€â”€â”€ */}
                     {previewIncomeSummaries.length > 0 && (
                       <div className="rounded-2xl border border-slate-200/60 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-800/30 overflow-hidden">
                         <div className="px-3.5 py-2 bg-emerald-50/40 dark:bg-emerald-950/20 border-b border-slate-200/60 dark:border-slate-800/80 flex items-center justify-between">
                           <span className="text-[11px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
-                            Autres Entrées ({previewIncomeSummaries.length})
+                            Autres EntrÃ©es ({previewIncomeSummaries.length})
                           </span>
                           <span className="text-[11px] font-black text-emerald-700 dark:text-emerald-400">
                             +{previewTotalGenInc.toLocaleString('fr-FR')} F
@@ -1420,13 +1417,13 @@ export default function Tresorerie() {
                       </div>
                     )}
 
-                    {/* ─── 3. DÉCAISSEMENTS / DÉPENSES PAR MOTIF ─── */}
+                    {/* â”€â”€â”€ 3. DÃ‰CAISSEMENTS / DÃ‰PENSES PAR MOTIF â”€â”€â”€ */}
                     {previewExpenseSummaries.length > 0 && (
                       <div className="rounded-2xl border border-slate-200/60 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-800/30 overflow-hidden">
                         <div className="px-3.5 py-2 bg-red-50/40 dark:bg-red-950/20 border-b border-slate-200/60 dark:border-slate-800/80 flex items-center justify-between">
                           <span className="text-[11px] font-black uppercase tracking-wider text-red-700 dark:text-red-400 flex items-center gap-1.5">
                             <span className="w-1.5 h-1.5 rounded-full bg-red-600"></span>
-                            Décaissements par motif ({previewExpenseSummaries.length})
+                            DÃ©caissements par motif ({previewExpenseSummaries.length})
                           </span>
                           <span className="text-[11px] font-black text-red-700 dark:text-red-400">
                             -{previewTotalExpenses.toLocaleString('fr-FR')} F
@@ -1459,7 +1456,7 @@ export default function Tresorerie() {
                 ) : (
                   <FileText size={18} />
                 )}
-                {isGeneratingPDF ? 'Génération en cours...' : 'Imprimer / Sauvegarder (PDF)'}
+                {isGeneratingPDF ? 'GÃ©nÃ©ration en cours...' : 'Imprimer / Sauvegarder (PDF)'}
               </button>
             </div>
           </div>
@@ -1468,3 +1465,4 @@ export default function Tresorerie() {
     </div>
   );
 }
+

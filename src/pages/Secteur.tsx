@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { createPrintWindow, printDocument } from '../utils/printUtils';
 import { supabase } from '../lib/supabase';
 import { Map, Wallet, Calendar, Bell, X, CheckCircle, Search, CalendarDays, FileText, ScanLine, Inbox } from 'lucide-react';
 import { QRCode } from 'react-qr-code';
@@ -42,7 +43,7 @@ export default function Secteur() {
   const [isMemberModalVisible, setIsMemberModalVisible] = useState(false);
   const [reportType, setReportType] = useState<'hebdo'|'mensuel'>('hebdo');
   
-  // États de sélection de la période de rapport
+  // Ã‰tats de sÃ©lection de la pÃ©riode de rapport
   const [reportWeekPreset, setReportWeekPreset] = useState<'current' | 'prev1' | 'prev2' | 'prev3' | 'custom'>('current');
   const [customWeekStart, setCustomWeekStart] = useState<string>(() => {
     const d = new Date();
@@ -114,7 +115,7 @@ export default function Secteur() {
             .select('amount, member_id')
             .in('member_id', memberIds)
             .gte('payment_date', startOfMonth)
-            .eq('status', 'Validé');
+            .eq('status', 'ValidÃ©');
             
           if (contribsData) {
             contribs = contribsData as Contribution[];
@@ -133,7 +134,7 @@ export default function Secteur() {
         setLateMembers(lateList);
       }
     } catch (error) {
-      console.error("Erreur chargement données secteur:", error);
+      console.error("Erreur chargement donnÃ©es secteur:", error);
     } finally {
       if (!silent) setLoading(false);
     }
@@ -185,7 +186,7 @@ export default function Secteur() {
         .from('sass_contributions')
         .select('*')
         .eq('member_id', member.id)
-        .eq('status', 'Validé');
+        .eq('status', 'ValidÃ©');
       
       if (error) throw error;
       setMemberContributions((data || []) as Contribution[]);
@@ -199,7 +200,7 @@ export default function Secteur() {
   const handleProcessPayment = async () => {
     const amountVal = parseFloat(paymentAmount);
     if (!selectedMemberId || !paymentAmount || isNaN(amountVal) || amountVal <= 0) {
-      window.alert("Veuillez sélectionner un membre et saisir un montant valide (supérieur à 0).");
+      window.alert("Veuillez sÃ©lectionner un membre et saisir un montant valide (supÃ©rieur Ã  0).");
       return;
     }
     
@@ -208,9 +209,9 @@ export default function Secteur() {
       const payload = {
         member_id: selectedMemberId,
         amount: parseFloat(paymentAmount),
-        payment_method: 'Espèces',
+        payment_method: 'EspÃ¨ces',
         sass_type: selectedSassType,
-        status: 'Validé',
+        status: 'ValidÃ©',
         payment_date: new Date().toISOString()
       };
 
@@ -222,13 +223,13 @@ export default function Secteur() {
       const memberName = memberInfo ? `${memberInfo.first_name} ${memberInfo.last_name}` : selectedMemberId;
       await supabase.from('activity_logs').insert([{
         user_email: userProfile?.email || 'Inconnu',
-        action_type: 'CRÉATION',
-        entity_type: 'TRÉSORERIE',
+        action_type: 'CRÃ‰ATION',
+        entity_type: 'TRÃ‰SORERIE',
         details: `Encaissement Sass (${selectedSassType}): ${paymentAmount} F pour ${memberName}`,
         sector: userProfile?.sector || 'N/A'
       }]);
 
-      window.alert("Cotisation enregistrée avec succès !");
+      window.alert("Cotisation enregistrÃ©e avec succÃ¨s !");
       fetchSectorData();
       
       setPaymentModalVisible(false);
@@ -244,7 +245,7 @@ export default function Secteur() {
 
   const handleSendReminders = async () => {
     if (selectedReminders.length === 0) {
-      window.alert("Veuillez sélectionner au moins un membre à relancer.");
+      window.alert("Veuillez sÃ©lectionner au moins un membre Ã  relancer.");
       return;
     }
 
@@ -254,10 +255,10 @@ export default function Secteur() {
         const member = sectorMembers.find(m => m.id === id);
         return {
           title: "Rappel de Cotisation Sass",
-          content: `Salam ${member?.first_name}, ceci est un rappel amical du Dahira DMK. Votre cotisation Sass pour le secteur ${sectorName} est en attente. Merci de régulariser votre situation.`,
+          content: `Salam ${member?.first_name}, ceci est un rappel amical du Dahira DMK. Votre cotisation Sass pour le secteur ${sectorName} est en attente. Merci de rÃ©gulariser votre situation.`,
           type: 'Push Mobile',
           target_audience: 'Retardataires',
-          status: 'Envoyé',
+          status: 'EnvoyÃ©',
           recipient_id: id
         };
       });
@@ -265,7 +266,7 @@ export default function Secteur() {
       const { error } = await supabase.from('communications').insert(payloads);
       if (error) throw error;
 
-      window.alert("Les relances ont été envoyées avec succès !");
+      window.alert("Les relances ont Ã©tÃ© envoyÃ©es avec succÃ¨s !");
       setRemindModalVisible(false);
       setSelectedReminders([]);
     } catch (error) {
@@ -293,8 +294,8 @@ export default function Secteur() {
   };
 
   const MONTHS_FR = [
-    'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
-    'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+    'Janvier', 'FÃ©vrier', 'Mars', 'Avril', 'Mai', 'Juin',
+    'Juillet', 'AoÃ»t', 'Septembre', 'Octobre', 'Novembre', 'DÃ©cembre'
   ];
 
   const getReportDateRange = useCallback(() => {
@@ -310,7 +311,7 @@ export default function Secteur() {
       } else {
         const now = new Date();
         const day = now.getDay();
-        // Début de semaine le Samedi 00h00m00s et Fin le Vendredi 23h59m59s
+        // DÃ©but de semaine le Samedi 00h00m00s et Fin le Vendredi 23h59m59s
         // 0: Dim, 1: Lun, 2: Mar, 3: Mer, 4: Jeu, 5: Ven, 6: Sam
         // Pour Samedi (6): diff = 0
         // Pour Dimanche (0): diff = 1
@@ -328,7 +329,7 @@ export default function Secteur() {
           end.setDate(currentSaturday.getDate() + 6);
           end.setHours(23, 59, 59, 999);
         } else if (reportWeekPreset === 'prev1') {
-          // Semaine passée (-1)
+          // Semaine passÃ©e (-1)
           start.setDate(currentSaturday.getDate() - 7);
           end = new Date(start);
           end.setDate(start.getDate() + 6);
@@ -396,7 +397,7 @@ export default function Secteur() {
           .in('member_id', memberIds)
           .gte('payment_date', startDate.toISOString())
           .lte('payment_date', endDate.toISOString())
-          .eq('status', 'Validé')
+          .eq('status', 'ValidÃ©')
           .order('payment_date', { ascending: false });
 
         if (error) throw error;
@@ -406,7 +407,7 @@ export default function Secteur() {
         const byType: Record<string, number> = {};
         contribs.forEach(c => {
           total += c.amount;
-          const sType = c.sass_type || 'Général';
+          const sType = c.sass_type || 'GÃ©nÃ©ral';
           byType[sType] = (byType[sType] || 0) + c.amount;
         });
 
@@ -417,7 +418,7 @@ export default function Secteur() {
           setReportLoading(false);
         }
       } catch (err) {
-        console.error('Erreur chargement aperçu rapport secteur:', err);
+        console.error('Erreur chargement aperÃ§u rapport secteur:', err);
         if (isMounted) setReportLoading(false);
       }
     }
@@ -431,6 +432,7 @@ export default function Secteur() {
   const generatePDF = async () => {
     if (isGeneratingPDF) return;
     setIsGeneratingPDF(true);
+    const targetWindow = createPrintWindow(); // ← Synchrone, dans le même tick du clic Safari
     try {
       const { startDate, endDate, dateText } = getReportDateRange();
       const title = reportType === 'hebdo' ? 'Rapport Hebdomadaire' : 'Rapport Mensuel';
@@ -445,7 +447,7 @@ export default function Secteur() {
           .in('member_id', memberIds)
           .gte('payment_date', startDate.toISOString())
           .lte('payment_date', endDate.toISOString())
-          .eq('status', 'Validé')
+          .eq('status', 'ValidÃ©')
           .order('payment_date', { ascending: false });
           
         if (error) throw error;
@@ -459,7 +461,7 @@ export default function Secteur() {
       if (contributions.length > 0) {
         contributions.forEach(c => {
           totalAmount += c.amount;
-          const sType = c.sass_type || 'Général';
+          const sType = c.sass_type || 'GÃ©nÃ©ral';
           totalsByType[sType] = (totalsByType[sType] || 0) + c.amount;
           
           const member = sectorMembers.find(m => m.id === c.member_id);
@@ -476,7 +478,7 @@ export default function Secteur() {
           `;
         });
       } else {
-        tableRows = `<tr><td colspan="4" style="padding: 8px; text-align: center;">Aucune transaction pour cette période.</td></tr>`;
+        tableRows = `<tr><td colspan="4" style="padding: 8px; text-align: center;">Aucune transaction pour cette pÃ©riode.</td></tr>`;
       }
 
       const typeSummaryRows = Object.entries(totalsByType)
@@ -488,7 +490,7 @@ export default function Secteur() {
           </div>
         `).join('');
 
-      const sectorName = userProfile?.sector || "Secteur Non Défini";
+      const sectorName = userProfile?.sector || "Secteur Non DÃ©fini";
       const htmlContent = `
         <html>
           <head>
@@ -519,7 +521,7 @@ export default function Secteur() {
             
             <h2>${title} - Secteur ${sectorName}</h2>
             <p><strong>Dieuwrigne :</strong> ${userProfile?.first_name} ${userProfile?.last_name}</p>
-            <p><strong>Période :</strong> ${dateText}</p>
+            <p><strong>PÃ©riode :</strong> ${dateText}</p>
             
             <div class="info-box">
               <div class="row">
@@ -527,13 +529,13 @@ export default function Secteur() {
                 <span class="value">${sectorMembers.length}</span>
               </div>
               <div class="row">
-                <span class="label">Total Global Collecté</span>
+                <span class="label">Total Global CollectÃ©</span>
                 <span class="value success">${totalAmount.toLocaleString('fr-FR')} FCFA</span>
               </div>
             </div>
 
             ${typeSummaryRows ? `
-            <h3>Détails par Rubrique</h3>
+            <h3>DÃ©tails par Rubrique</h3>
             <div class="info-box" style="background-color: #f8fafc; border: 1px solid #e2e8f0;">
               ${typeSummaryRows}
             </div>
@@ -545,7 +547,7 @@ export default function Secteur() {
                 <tr>
                   <th>Date</th>
                   <th>Membre</th>
-                  <th>Catégorie</th>
+                  <th>CatÃ©gorie</th>
                   <th>Montant</th>
                 </tr>
               </thead>
@@ -554,10 +556,10 @@ export default function Secteur() {
               </tbody>
             </table>
             
-            <p style="margin-top: 40px; font-size: 12px;"><em>Ce document est généré automatiquement par le Système d'Information DMK.</em></p>
+            <p style="margin-top: 40px; font-size: 12px;"><em>Ce document est gÃ©nÃ©rÃ© automatiquement par le SystÃ¨me d'Information DMK.</em></p>
             
             <div class="footer">
-              Généré le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}
+              GÃ©nÃ©rÃ© le ${new Date().toLocaleDateString('fr-FR')} Ã  ${new Date().toLocaleTimeString('fr-FR')}
             </div>
             <script>
               window.onload = function() { window.print(); }
@@ -566,17 +568,12 @@ export default function Secteur() {
         </html>
       `;
 
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        printWindow.document.write(htmlContent);
-        printWindow.document.close();
-      } else {
-        window.alert("Veuillez autoriser l'ouverture de pop-ups pour imprimer le rapport.");
-      }
+      printDocument(htmlContent, targetWindow);
       setReportModalVisible(false);
     } catch (error) {
+      if (targetWindow && !targetWindow.closed) targetWindow.close();
       console.error("Erreur PDF:", error);
-      window.alert("Impossible de générer le rapport.");
+      window.alert("Impossible de gÃ©nÃ©rer le rapport.");
     } finally {
       setIsGeneratingPDF(false);
     }
@@ -590,7 +587,7 @@ export default function Secteur() {
     );
   }
 
-  const sectorName = userProfile?.sector || "Secteur Non Défini";
+  const sectorName = userProfile?.sector || "Secteur Non DÃ©fini";
   const filteredMembersForPayment = sectorMembers.filter(m => 
     `${m.first_name} ${m.last_name}`.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -611,13 +608,13 @@ export default function Secteur() {
           
           <div className="mb-6 flex items-center gap-3 relative z-10">
             <Map size={24} className="text-blue-200" />
-            <h2 className="text-lg font-bold">Aperçu Global (Mois en cours)</h2>
+            <h2 className="text-lg font-bold">AperÃ§u Global (Mois en cours)</h2>
           </div>
           
           <div className="mb-2 text-4xl md:text-5xl font-black tracking-tight relative z-10 drop-shadow-sm">
             {(sectorStats.collected || 0).toLocaleString('fr-FR')} <span className="text-2xl text-blue-200 opacity-80">FCFA</span>
           </div>
-          <p className="mb-8 text-blue-100 font-medium relative z-10">Collecté ce mois-ci sur un objectif de {(sectorStats.goal || 0).toLocaleString('fr-FR')} FCFA</p>
+          <p className="mb-8 text-blue-100 font-medium relative z-10">CollectÃ© ce mois-ci sur un objectif de {(sectorStats.goal || 0).toLocaleString('fr-FR')} FCFA</p>
           
           <div className="relative z-10">
             <div className="mb-2 flex justify-between text-sm font-bold">
@@ -695,7 +692,7 @@ export default function Secteur() {
           <h2 className="mb-5 ml-2 text-xl font-black text-slate-900 dark:text-white tracking-tight transition-colors">Membres de la Commission ({sectorMembers.length})</h2>
           <div className="rounded-[32px] border border-white/50 dark:border-slate-700/50 bg-white/60 dark:bg-slate-900/50 overflow-hidden shadow-xl shadow-slate-200/50 dark:shadow-slate-900/50 transition-colors">
             {sectorMembers.length === 0 ? (
-              <div className="p-10 text-center text-slate-500 dark:text-slate-400 font-medium">Aucun membre enregistré dans ce secteur.</div>
+              <div className="p-10 text-center text-slate-500 dark:text-slate-400 font-medium">Aucun membre enregistrÃ© dans ce secteur.</div>
             ) : (
               <div className="divide-y divide-slate-200/50 dark:divide-slate-800/50">
                 {sectorMembers.map((member) => (
@@ -709,7 +706,7 @@ export default function Secteur() {
                     </div>
                     <div className="flex-1">
                       <div className="font-black text-slate-900 dark:text-white text-base tracking-wide transition-colors">{member.first_name} {member.last_name}</div>
-                      <div className="text-xs font-bold text-slate-500 dark:text-slate-400 mt-1 tracking-wider uppercase transition-colors">{member.role} • {member.status}</div>
+                      <div className="text-xs font-bold text-slate-500 dark:text-slate-400 mt-1 tracking-wider uppercase transition-colors">{member.role} â€¢ {member.status}</div>
                     </div>
                   </div>
                 ))}
@@ -755,13 +752,13 @@ export default function Secteur() {
                     </button>
                   ))}
                   {filteredMembersForPayment.length === 0 && (
-                    <div className="p-4 text-center text-sm font-bold text-slate-500 dark:text-slate-400">Aucun membre trouvé.</div>
+                    <div className="p-4 text-center text-sm font-bold text-slate-500 dark:text-slate-400">Aucun membre trouvÃ©.</div>
                   )}
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-3">Catégorie (Sass)</label>
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-3">CatÃ©gorie (Sass)</label>
                 <div className="flex flex-wrap gap-2">
                   {['Magal/Gamou', 'Ziaar', 'Keur Serigne Touba', 'Cahier Serigne Mountakha', 'Projets', 'Autres'].map(sass => (
                     <button
@@ -816,14 +813,14 @@ export default function Secteur() {
             <div className="p-6 pt-4">
               <div className="rounded-2xl border border-amber-200/50 dark:border-amber-900/50 bg-amber-50/80 dark:bg-amber-900/20 p-4 mb-6 shadow-inner">
                 <p className="text-sm font-medium text-amber-800 dark:text-amber-300 leading-relaxed">
-                  <span className="font-black">Message Auto :</span> "Salam [Prénom], ceci est un rappel amical du Dahira DMK. Votre cotisation Sass pour le secteur {sectorName} est en attente. Merci de régulariser votre situation."
+                  <span className="font-black">Message Auto :</span> "Salam [PrÃ©nom], ceci est un rappel amical du Dahira DMK. Votre cotisation Sass pour le secteur {sectorName} est en attente. Merci de rÃ©gulariser votre situation."
                 </p>
               </div>
 
               <div className="flex items-center justify-between mb-3">
                 <label className="text-sm font-bold text-slate-700 dark:text-slate-300">Membres en retard ({lateMembers.length})</label>
                 <button onClick={selectAllReminders} className="text-xs font-black uppercase tracking-wider text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors">
-                  {selectedReminders.length === lateMembers.length ? 'Désélectionner' : 'Sélectionner Tout'}
+                  {selectedReminders.length === lateMembers.length ? 'DÃ©sÃ©lectionner' : 'SÃ©lectionner Tout'}
                 </button>
               </div>
 
@@ -847,7 +844,7 @@ export default function Secteur() {
                 })}
                 {lateMembers.length === 0 && (
                   <div className="p-8 text-center text-emerald-600 dark:text-emerald-400 font-black">
-                    Félicitations ! Tous les membres sont à jour.
+                    FÃ©licitations ! Tous les membres sont Ã  jour.
                   </div>
                 )}
               </div>
@@ -865,7 +862,7 @@ export default function Secteur() {
         </div>
       )}
 
-      {/* MODAL : RAPPORTS (SÉLECTION SEMAINE / MOIS & RÉCAPITULATIF) */}
+      {/* MODAL : RAPPORTS (SÃ‰LECTION SEMAINE / MOIS & RÃ‰CAPITULATIF) */}
       {isReportModalVisible && (
         <div className="fixed inset-0 z-[9999] flex items-start sm:items-center justify-center bg-slate-950/80 p-2 sm:p-4 pt-3 sm:pt-4 backdrop-blur-md overflow-hidden">
           <div className="w-full max-w-xl max-h-[85vh] sm:max-h-[90vh] flex flex-col bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-[28px] sm:rounded-[32px] shadow-2xl p-4 sm:p-7 animate-in zoom-in-95 duration-200 overflow-hidden my-auto">
@@ -873,7 +870,7 @@ export default function Secteur() {
             <div className="flex justify-between items-center pb-4 mb-3 border-b border-slate-200/50 dark:border-slate-800/50">
               <div>
                 <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">Rapport de Collecte</h3>
-                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 mt-0.5">Secteur {sectorName} • DMK</p>
+                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 mt-0.5">Secteur {sectorName} â€¢ DMK</p>
               </div>
               <button 
                 onClick={() => setReportModalVisible(false)} 
@@ -885,7 +882,7 @@ export default function Secteur() {
               </button>
             </div>
 
-            {/* Corps déroulant du modal */}
+            {/* Corps dÃ©roulant du modal */}
             <div className="overflow-y-auto pr-1 -mr-1 flex-1 space-y-4">
               {/* Switch Type de Rapport */}
               <div className="flex p-1 bg-slate-100 dark:bg-slate-800/80 rounded-2xl border border-slate-200/50 dark:border-slate-700/50">
@@ -915,7 +912,7 @@ export default function Secteur() {
                 </button>
               </div>
 
-              {/* Sélecteur selon le type de rapport */}
+              {/* SÃ©lecteur selon le type de rapport */}
               {reportType === 'hebdo' ? (
                 <div className="space-y-2.5">
                   <label className="block text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -924,7 +921,7 @@ export default function Secteur() {
                   <div className="grid grid-cols-2 gap-2">
                     {[
                       { id: 'current', label: 'Cette semaine' },
-                      { id: 'prev1', label: 'Semaine passée (-1)' },
+                      { id: 'prev1', label: 'Semaine passÃ©e (-1)' },
                       { id: 'prev2', label: 'Il y a 2 semaines' },
                       { id: 'custom', label: 'Dates libres' },
                     ].map((preset) => (
@@ -946,7 +943,7 @@ export default function Secteur() {
                   {reportWeekPreset === 'custom' && (
                     <div className="grid grid-cols-2 gap-3 pt-1 animate-in fade-in-50 duration-200">
                       <div>
-                        <span className="block text-[11px] font-bold text-slate-500 mb-1">Date début</span>
+                        <span className="block text-[11px] font-bold text-slate-500 mb-1">Date dÃ©but</span>
                         <input
                           type="date"
                           value={customWeekStart}
@@ -969,7 +966,7 @@ export default function Secteur() {
               ) : (
                 <div className="space-y-2.5">
                   <label className="block text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    Choisir le mois et l'année
+                    Choisir le mois et l'annÃ©e
                   </label>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
@@ -985,7 +982,7 @@ export default function Secteur() {
                       </select>
                     </div>
                     <div>
-                      <span className="block text-[11px] font-bold text-slate-500 mb-1">Année</span>
+                      <span className="block text-[11px] font-bold text-slate-500 mb-1">AnnÃ©e</span>
                       <select
                         value={reportYear}
                         onChange={(e) => setReportYear(Number(e.target.value))}
@@ -1000,33 +997,33 @@ export default function Secteur() {
                 </div>
               )}
 
-              {/* Badge période sélectionnée */}
+              {/* Badge pÃ©riode sÃ©lectionnÃ©e */}
               <div className="rounded-2xl border border-blue-200/50 dark:border-blue-900/40 bg-blue-50/50 dark:bg-blue-950/30 p-3 flex items-center gap-3">
                 <CalendarDays className="text-blue-600 dark:text-blue-400 shrink-0" size={18} />
                 <div className="text-xs">
-                  <span className="font-bold text-slate-500 dark:text-slate-400 block text-[10px] uppercase tracking-wider">Période prise en compte</span>
+                  <span className="font-bold text-slate-500 dark:text-slate-400 block text-[10px] uppercase tracking-wider">PÃ©riode prise en compte</span>
                   <span className="font-black text-slate-800 dark:text-slate-200">{getReportDateRange().dateText}</span>
                 </div>
               </div>
 
-              {/* ─── RÉCAPITULATIF EN DIRECT ─── */}
+              {/* â”€â”€â”€ RÃ‰CAPITULATIF EN DIRECT â”€â”€â”€ */}
               <div className="space-y-3 pt-1">
                 <div className="flex items-center gap-2">
                   <div className={`w-1 h-4 rounded-full ${reportType === 'hebdo' ? 'bg-blue-600' : 'bg-amber-600'}`}></div>
-                  <h4 className="text-sm font-black text-slate-900 dark:text-white">Récapitulatif de la Période</h4>
+                  <h4 className="text-sm font-black text-slate-900 dark:text-white">RÃ©capitulatif de la PÃ©riode</h4>
                 </div>
 
                 {reportLoading ? (
                   <div className="flex items-center justify-center p-8 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200/50 dark:border-slate-800/50">
                     <div className="h-6 w-6 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"></div>
-                    <span className="ml-3 text-xs font-bold text-slate-500 dark:text-slate-400">Calcul du récapitulatif...</span>
+                    <span className="ml-3 text-xs font-bold text-slate-500 dark:text-slate-400">Calcul du rÃ©capitulatif...</span>
                   </div>
                 ) : (
                   <>
                     {/* Cartes KPIs */}
                     <div className="grid grid-cols-3 gap-2 sm:gap-3">
                       <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/50 dark:border-emerald-900/40">
-                        <span className="block text-[9px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Total Collecté</span>
+                        <span className="block text-[9px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Total CollectÃ©</span>
                         <span className="block text-base sm:text-lg font-black text-emerald-800 dark:text-emerald-300 mt-0.5">
                           {previewTotalCollected.toLocaleString('fr-FR')} F
                         </span>
@@ -1045,7 +1042,7 @@ export default function Secteur() {
                       </div>
                     </div>
 
-                    {/* Répartition par type de Sass */}
+                    {/* RÃ©partition par type de Sass */}
                     {Object.keys(previewTotalsByType).length > 0 && (
                       <div className="flex flex-wrap gap-1.5 pt-1">
                         {Object.entries(previewTotalsByType).map(([type, amt]) => (
@@ -1059,17 +1056,17 @@ export default function Secteur() {
                       </div>
                     )}
 
-                    {/* Journal des transactions de la période */}
+                    {/* Journal des transactions de la pÃ©riode */}
                     <div className="rounded-2xl border border-slate-200/60 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-800/30 overflow-hidden">
                       <div className="px-3.5 py-2 border-b border-slate-200/60 dark:border-slate-800/80 flex items-center justify-between">
                         <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                          Transactions de la période ({previewContributions.length})
+                          Transactions de la pÃ©riode ({previewContributions.length})
                         </span>
                       </div>
                       {previewContributions.length === 0 ? (
                         <div className="p-6 text-center text-slate-400 dark:text-slate-500 text-xs font-bold flex flex-col items-center justify-center gap-2">
                           <Inbox size={24} className="opacity-50" />
-                          <span>Aucune transaction enregistrée pour cette période</span>
+                          <span>Aucune transaction enregistrÃ©e pour cette pÃ©riode</span>
                         </div>
                       ) : (
                         <div className="max-h-44 overflow-y-auto divide-y divide-slate-200/40 dark:divide-slate-800/40">
@@ -1081,7 +1078,7 @@ export default function Secteur() {
                               <div key={c.id} className="p-2.5 px-3.5 flex items-center justify-between text-xs hover:bg-slate-100/50 dark:hover:bg-slate-800/50 transition-colors">
                                 <div className="min-w-0 pr-2">
                                   <p className="font-bold text-slate-900 dark:text-white truncate">{memberName}</p>
-                                  <p className="text-[10px] text-slate-500 dark:text-slate-400">Sass {c.sass_type || 'Général'} • {dateStr}</p>
+                                  <p className="text-[10px] text-slate-500 dark:text-slate-400">Sass {c.sass_type || 'GÃ©nÃ©ral'} â€¢ {dateStr}</p>
                                 </div>
                                 <span className="font-black text-emerald-600 dark:text-emerald-400 shrink-0">
                                   +{c.amount.toLocaleString('fr-FR')} F
@@ -1109,19 +1106,19 @@ export default function Secteur() {
                 ) : (
                   <FileText size={18} />
                 )}
-                {isGeneratingPDF ? 'Génération en cours...' : 'Imprimer / Télécharger (PDF)'}
+                {isGeneratingPDF ? 'GÃ©nÃ©ration en cours...' : 'Imprimer / TÃ©lÃ©charger (PDF)'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL : DÉTAILS SASS DU MEMBRE */}
+      {/* MODAL : DÃ‰TAILS SASS DU MEMBRE */}
       {isMemberModalVisible && selectedMemberDetails && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/60 dark:bg-black/60 p-0 sm:p-4 backdrop-blur-md">
           <div className="w-full sm:max-w-md bg-white/90 dark:bg-slate-900/90 border border-white/20 dark:border-slate-700/50 rounded-t-[32px] sm:rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-10 duration-300">
             <div className="flex items-center justify-between border-b border-slate-200/50 dark:border-slate-800/50 p-6 pb-4">
-              <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">Détails Sass</h3>
+              <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">DÃ©tails Sass</h3>
               <button 
                 onClick={() => setIsMemberModalVisible(false)} 
                 className="rounded-full bg-slate-100/50 dark:bg-slate-800/50 p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
@@ -1150,7 +1147,7 @@ export default function Secteur() {
               ) : (
                 <div className="space-y-4">
                   {['Magal/Gamou', 'Ziaar', 'Keur Serigne Touba', 'Cahier Serigne Mountakha', 'Projets', 'Autres'].map(sassType => {
-                    // Mapper le nom du type vers le champ de la base de données
+                    // Mapper le nom du type vers le champ de la base de donnÃ©es
                     let dbField = '';
                     if (sassType === 'Magal/Gamou') dbField = 'sass_magal';
                     if (sassType === 'Ziaar') dbField = 'sass_ziaar';
@@ -1175,7 +1172,7 @@ export default function Secteur() {
                           <span className="font-bold text-slate-700 dark:text-slate-300 text-sm">Sass {sassType}</span>
                           {isCompleted ? (
                             <span className="inline-flex items-center text-[10px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30 px-2 py-0.5 rounded-full">
-                              <CheckCircle size={10} className="mr-1" /> Terminé
+                              <CheckCircle size={10} className="mr-1" /> TerminÃ©
                             </span>
                           ) : (
                             <span className="text-xs font-bold text-slate-500">{percent}%</span>
@@ -1184,7 +1181,7 @@ export default function Secteur() {
                         
                         <div className="flex justify-between items-end mb-3">
                           <div>
-                            <p className="text-[10px] uppercase tracking-widest font-bold text-slate-400 mb-0.5">Payé</p>
+                            <p className="text-[10px] uppercase tracking-widest font-bold text-slate-400 mb-0.5">PayÃ©</p>
                             <p className={`font-black ${isCompleted ? 'text-emerald-600 dark:text-emerald-400' : 'text-blue-600 dark:text-blue-400'}`}>
                               {paid.toLocaleString('fr-FR')} F
                             </p>
@@ -1207,7 +1204,7 @@ export default function Secteur() {
                   
                   {memberContributions.length === 0 && (
                     <div className="p-6 text-center rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
-                      <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Aucun paiement enregistré pour ce membre.</p>
+                      <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Aucun paiement enregistrÃ© pour ce membre.</p>
                     </div>
                   )}
                 </div>
@@ -1220,3 +1217,4 @@ export default function Secteur() {
     </div>
   );
 }
+
