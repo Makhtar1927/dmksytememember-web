@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { DollarSign, ArrowDownRight, ArrowUpRight, ArrowDownLeft, CheckCircle, X, PlusCircle, FileText, CalendarDays, Calendar, Calendar as CalendarIcon, Moon, Star, Sparkles, Inbox } from 'lucide-react';
+import { DollarSign, ArrowDownRight, ArrowUpRight, CheckCircle, X, PlusCircle, FileText, CalendarDays, Calendar, Calendar as CalendarIcon, Moon, Star, Sparkles, Inbox, Layers } from 'lucide-react';
 
 const EXPENSE_REASONS = [
   'Achat Logistique', 'Location Sono/Matériel', 'Restauration / Alimentation',
@@ -16,6 +16,25 @@ interface MemberPreview {
   first_name: string;
   last_name: string;
   sector?: string;
+}
+
+export interface SectorRubricItem {
+  rubric: string;
+  amount: number;
+  count: number;
+}
+
+export interface SectorSummaryGroup {
+  sector: string;
+  rubrics: SectorRubricItem[];
+  totalSector: number;
+  totalCount: number;
+}
+
+export interface CategorySummaryItem {
+  name: string;
+  amount: number;
+  count: number;
 }
 
 interface MixedTransaction {
@@ -345,15 +364,9 @@ export default function Tresorerie() {
   const [previewNetBalance, setPreviewNetBalance] = useState(0);
   const [previewTotalSass, setPreviewTotalSass] = useState(0);
   const [previewTotalGenInc, setPreviewTotalGenInc] = useState(0);
-  const [previewExpensesByReason, setPreviewExpensesByReason] = useState<Record<string, number>>({});
-  const [previewMovements, setPreviewMovements] = useState<Array<{
-    id: string;
-    date: string;
-    title: string;
-    subtitle: string;
-    amount: number;
-    isIncome: boolean;
-  }>>([]);
+  const [previewSectorSummaries, setPreviewSectorSummaries] = useState<SectorSummaryGroup[]>([]);
+  const [previewIncomeSummaries, setPreviewIncomeSummaries] = useState<CategorySummaryItem[]>([]);
+  const [previewExpenseSummaries, setPreviewExpenseSummaries] = useState<CategorySummaryItem[]>([]);
   const [previewEventExpenses, setPreviewEventExpenses] = useState<Array<{
     id: string;
     expense_date: string;
@@ -417,66 +430,79 @@ export default function Tresorerie() {
           const safeGenIncomes = genIncomesRes.data || [];
           const safeExpenses = expensesRes.data || [];
 
+          // 1. Synthèse des Cotisations Sass par Secteur et par Rubrique
+          const sectorGroupMap: Record<string, {
+            total: number;
+            count: number;
+            rubrics: Record<string, { amount: number; count: number }>;
+          }> = {};
+
           let totalSass = 0;
-          safeContribs.forEach((c: any) => { totalSass += Number(c.amount) || 0; });
+          safeContribs.forEach((c: any) => {
+            const amt = Number(c.amount) || 0;
+            totalSass += amt;
 
+            const mem = c.members as unknown as { sector?: string } | null;
+            const sector = mem?.sector?.trim() || 'Non attribué';
+            const rubric = c.sass_type?.trim() || 'Général';
+
+            if (!sectorGroupMap[sector]) {
+              sectorGroupMap[sector] = { total: 0, count: 0, rubrics: {} };
+            }
+            sectorGroupMap[sector].total += amt;
+            sectorGroupMap[sector].count += 1;
+
+            if (!sectorGroupMap[sector].rubrics[rubric]) {
+              sectorGroupMap[sector].rubrics[rubric] = { amount: 0, count: 0 };
+            }
+            sectorGroupMap[sector].rubrics[rubric].amount += amt;
+            sectorGroupMap[sector].rubrics[rubric].count += 1;
+          });
+
+          const sectorSummaries: SectorSummaryGroup[] = Object.entries(sectorGroupMap)
+            .map(([sector, data]) => ({
+              sector,
+              totalSector: data.total,
+              totalCount: data.count,
+              rubrics: Object.entries(data.rubrics)
+                .map(([rubric, rData]) => ({
+                  rubric,
+                  amount: rData.amount,
+                  count: rData.count
+                }))
+                .sort((a, b) => b.amount - a.amount)
+            }))
+            .sort((a, b) => b.totalSector - a.totalSector);
+
+          // 2. Synthèse des Autres Entrées (Barkelou, Projets...)
+          const incomeGroupMap: Record<string, { amount: number; count: number }> = {};
           let totalGenInc = 0;
-          safeGenIncomes.forEach((i: any) => { totalGenInc += Number(i.amount) || 0; });
+          safeGenIncomes.forEach((i: any) => {
+            const amt = Number(i.amount) || 0;
+            totalGenInc += amt;
+            const src = i.source?.trim() || 'Autre entrée';
+            if (!incomeGroupMap[src]) incomeGroupMap[src] = { amount: 0, count: 0 };
+            incomeGroupMap[src].amount += amt;
+            incomeGroupMap[src].count += 1;
+          });
+          const incomeSummaries: CategorySummaryItem[] = Object.entries(incomeGroupMap)
+            .map(([name, data]) => ({ name, amount: data.amount, count: data.count }))
+            .sort((a, b) => b.amount - a.amount);
 
+          // 3. Synthèse des Décaissements / Dépenses
+          const expGroupMap: Record<string, { amount: number; count: number }> = {};
           let totalExp = 0;
-          const expByReason: Record<string, number> = {};
           safeExpenses.forEach((e: any) => {
             const amt = Number(e.amount) || 0;
-            const rsn = e.reason || 'Autre';
-            expByReason[rsn] = (expByReason[rsn] || 0) + amt;
             totalExp += amt;
+            const rsn = e.reason?.trim() || 'Autre';
+            if (!expGroupMap[rsn]) expGroupMap[rsn] = { amount: 0, count: 0 };
+            expGroupMap[rsn].amount += amt;
+            expGroupMap[rsn].count += 1;
           });
-
-          const movs: Array<{
-            id: string;
-            date: string;
-            title: string;
-            subtitle: string;
-            amount: number;
-            isIncome: boolean;
-          }> = [];
-
-          safeContribs.forEach((c: any) => {
-            const mem = c.members as unknown as { first_name?: string; last_name?: string } | null;
-            const name = mem ? `${mem.first_name || ''} ${mem.last_name || ''}`.trim() : 'Membre';
-            movs.push({
-              id: c.id,
-              date: c.payment_date,
-              title: `Sass: ${name}`,
-              subtitle: `Cotisation ${c.sass_type || 'Général'}`,
-              amount: c.amount,
-              isIncome: true
-            });
-          });
-
-          safeGenIncomes.forEach((i: any) => {
-            movs.push({
-              id: i.id,
-              date: i.income_date,
-              title: i.source || 'Entrée trésorerie',
-              subtitle: i.description || '',
-              amount: i.amount,
-              isIncome: true
-            });
-          });
-
-          safeExpenses.forEach((e: any) => {
-            movs.push({
-              id: e.id,
-              date: e.expense_date,
-              title: e.reason || 'Dépense trésorerie',
-              subtitle: e.beneficiary || e.description || '',
-              amount: e.amount,
-              isIncome: false
-            });
-          });
-
-          movs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+          const expenseSummaries: CategorySummaryItem[] = Object.entries(expGroupMap)
+            .map(([name, data]) => ({ name, amount: data.amount, count: data.count }))
+            .sort((a, b) => b.amount - a.amount);
 
           if (isMounted) {
             setPreviewTotalSass(totalSass);
@@ -484,8 +510,9 @@ export default function Tresorerie() {
             setPreviewTotalEntries(totalSass + totalGenInc);
             setPreviewTotalExpenses(totalExp);
             setPreviewNetBalance((totalSass + totalGenInc) - totalExp);
-            setPreviewExpensesByReason(expByReason);
-            setPreviewMovements(movs);
+            setPreviewSectorSummaries(sectorSummaries);
+            setPreviewIncomeSummaries(incomeSummaries);
+            setPreviewExpenseSummaries(expenseSummaries);
             setReportLoading(false);
           }
         }
@@ -600,13 +627,63 @@ export default function Tresorerie() {
         const safeGenIncomes = genIncomes || [];
         const safeExpenses = expenses || [];
 
-        const sectorsTotal: Record<string, number> = {};
+        // 1. Synthèse des Cotisations Sass par Secteur et par Rubrique
+        const pdfSectorGroupMap: Record<string, {
+          total: number;
+          count: number;
+          rubrics: Record<string, { amount: number; count: number }>;
+        }> = {};
+
         let totalSass = 0;
         safeContribs.forEach(c => {
+          const amt = Number(c.amount) || 0;
+          totalSass += amt;
+
           const mem = c.members as unknown as MemberPreview | null;
-          const sec = mem?.sector || 'Inconnu';
-          sectorsTotal[sec] = (sectorsTotal[sec] || 0) + c.amount;
-          totalSass += c.amount;
+          const sector = mem?.sector?.trim() || 'Non attribué';
+          const rubric = c.sass_type?.trim() || 'Général';
+
+          if (!pdfSectorGroupMap[sector]) {
+            pdfSectorGroupMap[sector] = { total: 0, count: 0, rubrics: {} };
+          }
+          pdfSectorGroupMap[sector].total += amt;
+          pdfSectorGroupMap[sector].count += 1;
+
+          if (!pdfSectorGroupMap[sector].rubrics[rubric]) {
+            pdfSectorGroupMap[sector].rubrics[rubric] = { amount: 0, count: 0 };
+          }
+          pdfSectorGroupMap[sector].rubrics[rubric].amount += amt;
+          pdfSectorGroupMap[sector].rubrics[rubric].count += 1;
+        });
+
+        const sortedPdfSectors = Object.entries(pdfSectorGroupMap).sort((a, b) => b[1].total - a[1].total);
+
+        let sectorRubricRows = '';
+        sortedPdfSectors.forEach(([sector, sData]) => {
+          const sortedRubrics = Object.entries(sData.rubrics).sort((a, b) => b[1].amount - a[1].amount);
+          
+          // Ligne d'en-tête de secteur avec sous-total
+          sectorRubricRows += `
+            <tr style="background-color: #f1f5f9; font-weight: bold; border-top: 2px solid #cbd5e1;">
+              <td colspan="2" style="color: #1e3a8a; font-size: 13px; padding: 10px 12px;">
+                🏛️ Secteur : ${sector} (${sData.count} cotisations)
+              </td>
+              <td style="text-align: right; color: #1e3a8a; font-size: 13px; font-weight: bold; padding: 10px 12px;">
+                ${sData.total.toLocaleString('fr-FR')} F
+              </td>
+            </tr>
+          `;
+
+          // Lignes de chaque rubrique dans ce secteur
+          sortedRubrics.forEach(([rubric, rData]) => {
+            sectorRubricRows += `
+              <tr>
+                <td style="padding-left: 28px; color: #334155;">${rubric}</td>
+                <td style="text-align: center; color: #64748b; font-size: 12px;">${rData.count} versement(s)</td>
+                <td style="text-align: right; font-weight: 600; color: #0f172a;">${rData.amount.toLocaleString('fr-FR')} F</td>
+              </tr>
+            `;
+          });
         });
 
         const incomesTotal: Record<string, number> = {};
@@ -625,7 +702,6 @@ export default function Tresorerie() {
 
         const netBalance = (totalSass + totalGenInc) - totalExp;
 
-        const sectorRows = Object.entries(sectorsTotal).map(([k, v]) => `<tr><td>Secteur ${k}</td><td style="text-align:right; font-weight:bold;">${v.toLocaleString('fr-FR')} F</td></tr>`).join('');
         const incomeRows = Object.entries(incomesTotal).map(([k, v]) => `<tr><td>${k}</td><td style="text-align:right; font-weight:bold;">${v.toLocaleString('fr-FR')} F</td></tr>`).join('');
         const expenseRows = Object.entries(expensesTotal).map(([k, v]) => `<tr><td>${k}</td><td style="text-align:right; font-weight:bold;">${v.toLocaleString('fr-FR')} F</td></tr>`).join('');
 
@@ -678,10 +754,22 @@ export default function Tresorerie() {
                 </div>
               </div>
               ${totalSass > 0 ? `
-                <div class="table-title">1. Cotisations Sass (Par Secteur)</div>
+                <div class="table-title">1. Cotisations Sass (Par Secteur & Rubrique)</div>
                 <table>
-                  <thead><tr><th>Secteur</th><th style="text-align:right;">Montant Collecté</th></tr></thead>
-                  <tbody>${sectorRows}</tbody>
+                  <thead>
+                    <tr>
+                      <th>Secteur / Rubrique</th>
+                      <th style="text-align:center;">Détail</th>
+                      <th style="text-align:right;">Montant Collecté</th>
+                    </tr>
+                  </thead>
+                  <tbody>${sectorRubricRows}</tbody>
+                  <tfoot>
+                    <tr style="background-color: #e2e8f0; font-weight: bold;">
+                      <td colspan="2" style="padding: 10px; text-transform: uppercase;">Total Général Cotisations Sass :</td>
+                      <td style="text-align: right; padding: 10px; color: #16a34a; font-size: 14px;">+ ${totalSass.toLocaleString('fr-FR')} F</td>
+                    </tr>
+                  </tfoot>
                 </table>
               ` : ''}
               ${totalGenInc > 0 ? `
@@ -1236,7 +1324,7 @@ export default function Tresorerie() {
                       </div>
                     </div>
 
-                    {/* Pills Détails */}
+                    {/* Pills Détails Global */}
                     <div className="flex flex-wrap gap-1.5 pt-1">
                       <span className="inline-flex items-center px-2.5 py-1 rounded-xl text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/50 dark:border-slate-700/50">
                         Sass : <strong className="ml-1 text-slate-900 dark:text-white">{previewTotalSass.toLocaleString('fr-FR')} F</strong>
@@ -1246,54 +1334,114 @@ export default function Tresorerie() {
                           Autres entrées : <strong className="ml-1 text-slate-900 dark:text-white">{previewTotalGenInc.toLocaleString('fr-FR')} F</strong>
                         </span>
                       )}
-                      {Object.entries(previewExpensesByReason).slice(0, 3).map(([rsn, amt]) => (
+                      {previewExpenseSummaries.slice(0, 3).map((exp) => (
                         <span
-                          key={rsn}
+                          key={exp.name}
                           className="inline-flex items-center px-2.5 py-1 rounded-xl text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/50 dark:border-slate-700/50"
                         >
-                          {rsn} : <strong className="ml-1 text-red-600 dark:text-red-400">-{amt.toLocaleString('fr-FR')} F</strong>
+                          {exp.name} : <strong className="ml-1 text-red-600 dark:text-red-400">-{exp.amount.toLocaleString('fr-FR')} F</strong>
                         </span>
                       ))}
                     </div>
 
-                    {/* Journal des mouvements récents de la période */}
-                    <div className="rounded-2xl border border-slate-200/60 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-800/30 overflow-hidden">
-                      <div className="px-3.5 py-2 border-b border-slate-200/60 dark:border-slate-800/80 flex items-center justify-between">
-                        <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                          Mouvements de la période ({previewMovements.length})
+                    {/* ─── 1. SYNTHÈSE DES COTISATIONS SASS PAR SECTEUR & PAR RUBRIQUE ─── */}
+                    <div className="rounded-2xl border border-slate-200/60 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-800/30 overflow-hidden space-y-0">
+                      <div className="px-3.5 py-2.5 bg-blue-50/50 dark:bg-blue-950/20 border-b border-slate-200/60 dark:border-slate-800/80 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Layers size={14} className="text-blue-600 dark:text-blue-400" />
+                          <span className="text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                            Cotisations par Secteur & Rubrique
+                          </span>
+                        </div>
+                        <span className="text-[11px] font-black text-blue-600 dark:text-blue-400">
+                          {previewTotalSass.toLocaleString('fr-FR')} F
                         </span>
                       </div>
-                      {previewMovements.length === 0 ? (
+
+                      {previewSectorSummaries.length === 0 ? (
                         <div className="p-6 text-center text-slate-400 dark:text-slate-500 text-xs font-bold flex flex-col items-center justify-center gap-2">
                           <Inbox size={24} className="opacity-50" />
-                          <span>Aucun mouvement financier sur cette période</span>
+                          <span>Aucune cotisation Sass enregistrée sur cette période</span>
                         </div>
                       ) : (
-                        <div className="max-h-44 overflow-y-auto divide-y divide-slate-200/40 dark:divide-slate-800/40">
-                          {previewMovements.slice(0, 25).map((m) => {
-                            const dateStr = new Date(m.date).toLocaleDateString('fr-FR');
-                            return (
-                              <div key={m.id} className="p-2.5 px-3.5 flex items-center justify-between text-xs hover:bg-slate-100/50 dark:hover:bg-slate-800/50 transition-colors">
-                                <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                                    m.isIncome ? 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600' : 'bg-red-100 dark:bg-red-950/50 text-red-600'
-                                  }`}>
-                                    {m.isIncome ? <ArrowDownLeft size={14} /> : <ArrowUpRight size={14} />}
-                                  </div>
-                                  <div className="min-w-0">
-                                    <p className="font-bold text-slate-900 dark:text-white truncate">{m.title}</p>
-                                    <p className="text-[10px] text-slate-500 dark:text-slate-400">{m.subtitle ? `${m.subtitle} • ` : ''}{dateStr}</p>
-                                  </div>
-                                </div>
-                                <span className={`font-black shrink-0 ${m.isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                                  {m.isIncome ? '+' : '-'}{Number(m.amount).toLocaleString('fr-FR')} F
+                        <div className="max-h-56 overflow-y-auto divide-y divide-slate-200/50 dark:divide-slate-800/50 p-2 space-y-2">
+                          {previewSectorSummaries.map((s) => (
+                            <div key={s.sector} className="p-2.5 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-slate-200/40 dark:border-slate-700/40 shadow-xs">
+                              {/* En-tête Secteur */}
+                              <div className="flex items-center justify-between pb-1.5 border-b border-slate-100 dark:border-slate-800">
+                                <span className="font-black text-xs text-slate-900 dark:text-white flex items-center gap-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+                                  {s.sector}
+                                  <span className="text-[10px] font-bold text-slate-400">({s.totalCount})</span>
+                                </span>
+                                <span className="font-black text-xs text-blue-600 dark:text-blue-400">
+                                  {s.totalSector.toLocaleString('fr-FR')} F
                                 </span>
                               </div>
-                            );
-                          })}
+                              {/* Détail par Rubrique */}
+                              <div className="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                {s.rubrics.map((r) => (
+                                  <div key={r.rubric} className="flex items-center justify-between text-[11px] bg-slate-50 dark:bg-slate-800/50 px-2.5 py-1 rounded-lg">
+                                    <span className="text-slate-600 dark:text-slate-400 font-semibold truncate pr-2">
+                                      {r.rubric}
+                                    </span>
+                                    <span className="font-bold text-slate-900 dark:text-white shrink-0">
+                                      {r.amount.toLocaleString('fr-FR')} F
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
+
+                    {/* ─── 2. AUTRES ENTRÉES TRÉSORERIE (BARKELOU, PROJETS...) ─── */}
+                    {previewIncomeSummaries.length > 0 && (
+                      <div className="rounded-2xl border border-slate-200/60 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-800/30 overflow-hidden">
+                        <div className="px-3.5 py-2 bg-emerald-50/40 dark:bg-emerald-950/20 border-b border-slate-200/60 dark:border-slate-800/80 flex items-center justify-between">
+                          <span className="text-[11px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                            Autres Entrées ({previewIncomeSummaries.length})
+                          </span>
+                          <span className="text-[11px] font-black text-emerald-700 dark:text-emerald-400">
+                            +{previewTotalGenInc.toLocaleString('fr-FR')} F
+                          </span>
+                        </div>
+                        <div className="p-2 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                          {previewIncomeSummaries.map((inc) => (
+                            <div key={inc.name} className="flex items-center justify-between text-xs p-2 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-slate-200/40 dark:border-slate-700/40">
+                              <span className="font-bold text-slate-800 dark:text-slate-200 truncate pr-2">{inc.name}</span>
+                              <span className="font-black text-emerald-600 dark:text-emerald-400 shrink-0">+{inc.amount.toLocaleString('fr-FR')} F</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ─── 3. DÉCAISSEMENTS / DÉPENSES PAR MOTIF ─── */}
+                    {previewExpenseSummaries.length > 0 && (
+                      <div className="rounded-2xl border border-slate-200/60 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-800/30 overflow-hidden">
+                        <div className="px-3.5 py-2 bg-red-50/40 dark:bg-red-950/20 border-b border-slate-200/60 dark:border-slate-800/80 flex items-center justify-between">
+                          <span className="text-[11px] font-black uppercase tracking-wider text-red-700 dark:text-red-400 flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-600"></span>
+                            Décaissements par motif ({previewExpenseSummaries.length})
+                          </span>
+                          <span className="text-[11px] font-black text-red-700 dark:text-red-400">
+                            -{previewTotalExpenses.toLocaleString('fr-FR')} F
+                          </span>
+                        </div>
+                        <div className="p-2 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                          {previewExpenseSummaries.map((exp) => (
+                            <div key={exp.name} className="flex items-center justify-between text-xs p-2 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-slate-200/40 dark:border-slate-700/40">
+                              <span className="font-bold text-slate-800 dark:text-slate-200 truncate pr-2">{exp.name}</span>
+                              <span className="font-black text-red-600 dark:text-red-400 shrink-0">-{exp.amount.toLocaleString('fr-FR')} F</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </>
                 )}
               </div>
