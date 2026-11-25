@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { TrendingUp, Users, Activity, Search, ChevronDown } from 'lucide-react';
+import { TrendingUp, Users, Activity, Search, ChevronDown, ArrowDownRight, ArrowUpRight, Wallet } from 'lucide-react';
 
 const SECTORS = [
   "Vaisselle", "Café", "Restauration", "Organisation", "Sonorisation",
@@ -49,10 +49,29 @@ interface SectorPerf {
   percent: number;
 }
 
+interface TreasuryIncomeItem {
+  id: string;
+  amount: number;
+  income_date: string;
+  category?: string;
+  description?: string;
+}
+
+interface TreasuryExpenseItem {
+  id: string;
+  amount: number;
+  expense_date: string;
+  beneficiary?: string;
+  reason?: string;
+}
+
 export default function Statistiques() {
   const [loading, setLoading] = useState(true);
   
   const [allMembersLight, setAllMembersLight] = useState<MemberLight[]>([]);
+  const [detailedIncomes, setDetailedIncomes] = useState<TreasuryIncomeItem[]>([]);
+  const [detailedExpenses, setDetailedExpenses] = useState<TreasuryExpenseItem[]>([]);
+  const [financeTab, setFinanceTab] = useState<'incomes' | 'expenses'>('incomes');
   
   const [stats, setStats] = useState<{
     activeMembersCount: number;
@@ -121,6 +140,31 @@ export default function Statistiques() {
         console.warn("Avertissement RPC get_statistics_dashboard:", rpcError);
         return;
       }
+
+      // Récupération des détails complets des encaissements trésorerie et décaissements
+      const [{ data: rawIncomes }, { data: rawExpenses }] = await Promise.all([
+        supabase.from('treasury_incomes').select('*').order('income_date', { ascending: false }),
+        supabase.from('treasury_expenses').select('*').order('expense_date', { ascending: false })
+      ]);
+
+      const filteredIncomesList = ((rawIncomes || []) as TreasuryIncomeItem[]).filter(inc => {
+        if (!inc.income_date) return false;
+        const d = new Date(inc.income_date);
+        if (d.getFullYear() !== currentYear) return false;
+        if (selectedMonth !== -1 && d.getMonth() !== selectedMonth) return false;
+        return true;
+      });
+
+      const filteredExpensesList = ((rawExpenses || []) as TreasuryExpenseItem[]).filter(exp => {
+        if (!exp.expense_date) return false;
+        const d = new Date(exp.expense_date);
+        if (d.getFullYear() !== currentYear) return false;
+        if (selectedMonth !== -1 && d.getMonth() !== selectedMonth) return false;
+        return true;
+      });
+
+      setDetailedIncomes(filteredIncomesList);
+      setDetailedExpenses(filteredExpensesList);
 
       let singleMemberData: MemberLight | null = null;
       let filteredMemData: MemberLight[] = [];
@@ -336,8 +380,13 @@ export default function Statistiques() {
             <div className="flex h-12 w-12 items-center justify-center rounded-[16px] bg-indigo-100 dark:bg-indigo-500/20 mb-4 shadow-inner group-hover:scale-110 transition-transform">
               <TrendingUp size={24} className="text-indigo-600 dark:text-indigo-400 drop-shadow-sm" />
             </div>
-            <div className="text-xl md:text-2xl font-black text-slate-900 dark:text-white transition-colors tracking-tight">{(stats.treasuryIncomes || 0).toLocaleString('fr-FR')} F</div>
+            <div className="text-xl md:text-2xl font-black text-slate-900 dark:text-white transition-colors tracking-tight">
+              {(stats.totalCollected + (stats.treasuryIncomes || 0)).toLocaleString('fr-FR')} F
+            </div>
             <div className="text-sm font-bold text-slate-500 dark:text-slate-400 mt-0.5 transition-colors">Total Encaissements</div>
+            <div className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 mt-1">
+              Sass: {stats.totalCollected.toLocaleString('fr-FR')} F • Autres: {(stats.treasuryIncomes || 0).toLocaleString('fr-FR')} F
+            </div>
           </div>
 
           <div className="rounded-[24px] bg-white/60 dark:bg-slate-900/50 p-5 shadow-lg shadow-slate-200/30 dark:shadow-slate-900/30 border border-white/50 dark:border-slate-700/50 transition-all hover:-translate-y-1 hover:shadow-xl group">
@@ -404,6 +453,120 @@ export default function Statistiques() {
             </div>
           </div>
         )}
+
+        {/* DETAILS ENCAISSEMENTS & DECAISSEMENTS TRESORERIE */}
+        <div className="rounded-[32px] bg-white/60 dark:bg-slate-900/50 p-6 md:p-8 shadow-lg shadow-slate-200/30 dark:shadow-slate-900/30 border border-white/50 dark:border-slate-700/50 transition-all hover:shadow-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-indigo-100 dark:bg-indigo-500/20 shadow-inner">
+                <Wallet size={22} className="text-indigo-600 dark:text-indigo-400" />
+              </div>
+              <div>
+                <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight transition-colors">Détails Trésorerie</h2>
+                <p className="text-xs font-bold text-slate-500 dark:text-slate-400">Autres encaissements & décaissements de la période</p>
+              </div>
+            </div>
+
+            <div className="flex bg-slate-100/80 dark:bg-slate-800/80 p-1 rounded-[16px] border border-slate-200/50 dark:border-slate-700/50">
+              <button
+                onClick={() => setFinanceTab('incomes')}
+                className={`px-4 py-2 rounded-[12px] text-xs font-black transition-all flex items-center gap-1.5 ${
+                  financeTab === 'incomes'
+                    ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-sm'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                <ArrowDownRight size={14} />
+                Encaissements ({detailedIncomes.length})
+              </button>
+              <button
+                onClick={() => setFinanceTab('expenses')}
+                className={`px-4 py-2 rounded-[12px] text-xs font-black transition-all flex items-center gap-1.5 ${
+                  financeTab === 'expenses'
+                    ? 'bg-white dark:bg-slate-700 text-rose-600 dark:text-rose-400 shadow-sm'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                <ArrowUpRight size={14} />
+                Décaissements ({detailedExpenses.length})
+              </button>
+            </div>
+          </div>
+
+          {financeTab === 'incomes' ? (
+            <div className="space-y-3">
+              {detailedIncomes.length === 0 ? (
+                <div className="p-8 text-center text-sm font-bold text-slate-500 dark:text-slate-400 bg-white/40 dark:bg-slate-800/30 rounded-[20px]">
+                  Aucun autre encaissement trésorerie sur cette période.
+                </div>
+              ) : (
+                <div className="rounded-[24px] bg-white/60 dark:bg-slate-800/40 border border-slate-200/50 dark:border-slate-700/50 divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden max-h-[380px] overflow-y-auto custom-scrollbar">
+                  {detailedIncomes.map((inc) => (
+                    <div key={inc.id} className="flex items-center justify-between p-4 hover:bg-emerald-50/40 dark:hover:bg-emerald-900/10 transition-colors gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+                          <ArrowDownRight size={18} />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-black text-slate-900 dark:text-white text-sm truncate">
+                              {inc.category || 'Autre entrée'}
+                            </span>
+                            <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500">
+                              • {new Date(inc.income_date).toLocaleDateString('fr-FR')}
+                            </span>
+                          </div>
+                          <p className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                            {inc.description || 'Encaissement trésorerie'}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="font-black text-emerald-600 dark:text-emerald-400 text-sm md:text-base whitespace-nowrap">
+                        +{Number(inc.amount).toLocaleString('fr-FR')} F
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {detailedExpenses.length === 0 ? (
+                <div className="p-8 text-center text-sm font-bold text-slate-500 dark:text-slate-400 bg-white/40 dark:bg-slate-800/30 rounded-[20px]">
+                  Aucun décaissement enregistré sur cette période.
+                </div>
+              ) : (
+                <div className="rounded-[24px] bg-white/60 dark:bg-slate-800/40 border border-slate-200/50 dark:border-slate-700/50 divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden max-h-[380px] overflow-y-auto custom-scrollbar">
+                  {detailedExpenses.map((exp) => (
+                    <div key={exp.id} className="flex items-center justify-between p-4 hover:bg-rose-50/40 dark:hover:bg-rose-900/10 transition-colors gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-rose-100 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400">
+                          <ArrowUpRight size={18} />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-black text-slate-900 dark:text-white text-sm truncate">
+                              {exp.beneficiary || 'Bénéficiaire non spécifié'}
+                            </span>
+                            <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500">
+                              • {new Date(exp.expense_date).toLocaleDateString('fr-FR')}
+                            </span>
+                          </div>
+                          <p className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                            {exp.reason || 'Dépense de trésorerie'}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="font-black text-rose-600 dark:text-rose-400 text-sm md:text-base whitespace-nowrap">
+                        -{Number(exp.amount).toLocaleString('fr-FR')} F
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* CHART : REPARTITION SASS */}
         <div className="rounded-[32px] bg-white/60 dark:bg-slate-900/50 p-6 md:p-8 shadow-lg shadow-slate-200/30 dark:shadow-slate-900/30 border border-white/50 dark:border-slate-700/50 transition-all hover:shadow-xl">
