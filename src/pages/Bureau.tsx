@@ -37,6 +37,7 @@ interface BureauMeeting {
   id: string;
   title: string;
   date_time: string;
+  end_date?: string | null;
   location?: string | null;
   agenda?: string | null;
   maps_link?: string | null;
@@ -63,6 +64,7 @@ export default function Bureau() {
   const [mTitle, setMTitle] = useState('');
   const [mDate, setMDate] = useState('');
   const [mTime, setMTime] = useState('');
+  const [mEndTime, setMEndTime] = useState('');
   const [mLocation, setMLocation] = useState('');
   const [mAgenda, setMAgenda] = useState('');
 
@@ -158,8 +160,10 @@ export default function Bureau() {
       combinedMeetings.sort((a, b) => new Date(a.date_time).getTime() - new Date(b.date_time).getTime());
 
       const now = new Date();
-      setUpcomingMeetings(combinedMeetings.filter(m => new Date(m.date_time) >= now));
-      setPastMeetings(combinedMeetings.filter(m => new Date(m.date_time) < now).reverse());
+      const getEffectiveEnd = (m: BureauMeeting) =>
+        m.end_date ? new Date(m.end_date) : new Date(new Date(m.date_time).getTime() + 2 * 60 * 60 * 1000);
+      setUpcomingMeetings(combinedMeetings.filter(m => getEffectiveEnd(m) >= now));
+      setPastMeetings(combinedMeetings.filter(m => getEffectiveEnd(m) < now).reverse());
 
       // 4. Fetch Attendances
       if (session?.user?.email) {
@@ -213,36 +217,74 @@ export default function Bureau() {
         return;
       }
 
+      let meetingEndDate: Date;
+      if (mEndTime) {
+        meetingEndDate = new Date(`${mDate}T${mEndTime}:00`);
+        if (meetingEndDate <= meetingDate) {
+          meetingEndDate.setDate(meetingEndDate.getDate() + 1);
+        }
+      } else {
+        meetingEndDate = new Date(meetingDate.getTime() + 2 * 60 * 60 * 1000);
+      }
+
       // Tentative 1 : bureau_meetings (nécessite RLS is_secretaire)
-      const { error: bureauErr } = await supabase
+      let { error: bureauErr } = await supabase
         .from('bureau_meetings')
         .insert({
           title: mTitle.trim(),
           date_time: meetingDate.toISOString(),
+          end_date: meetingEndDate.toISOString(),
           location: mLocation.trim(),
           agenda: mAgenda.trim() || null,
           created_by: session?.user?.id
         });
 
+      if (bureauErr && bureauErr.message?.includes('end_date')) {
+        const retry = await supabase
+          .from('bureau_meetings')
+          .insert({
+            title: mTitle.trim(),
+            date_time: meetingDate.toISOString(),
+            location: mLocation.trim(),
+            agenda: mAgenda.trim() || null,
+            created_by: session?.user?.id
+          });
+        bureauErr = retry.error;
+      }
+
       if (bureauErr) {
         // Fallback : insert dans events avec type "Réunion Bureau"
         console.warn("bureau_meetings bloqué (RLS), fallback vers events:", bureauErr.message);
-        const { error: evtErr } = await supabase
+        let { error: evtErr } = await supabase
           .from('events')
           .insert({
             title: mTitle.trim(),
             event_date: meetingDate.toISOString(),
+            end_date: meetingEndDate.toISOString(),
             location: mLocation.trim(),
             description: mAgenda.trim() || null,
             event_type: 'Réunion Bureau',
             created_by: session?.user?.id
           });
+        if (evtErr && evtErr.message?.includes('end_date')) {
+          const retryEvt = await supabase
+            .from('events')
+            .insert({
+              title: mTitle.trim(),
+              event_date: meetingDate.toISOString(),
+              location: mLocation.trim(),
+              description: mAgenda.trim() || null,
+              event_type: 'Réunion Bureau',
+              created_by: session?.user?.id
+            });
+          evtErr = retryEvt.error;
+        }
         if (evtErr) throw new Error(evtErr.message);
       }
 
       window.alert("Réunion planifiée avec succès !");
       setModalVisible(false);
-      setMTitle(''); setMDate(''); setMTime(''); setMLocation(''); setMAgenda('');
+      setMTitle(''); setMDate(''); setMTime(''); setMEndTime(''); setMLocation(''); setMAgenda('');
       
       fetchBureauData();
     } catch (error) {
@@ -589,14 +631,18 @@ export default function Bureau() {
                 <input type="text" required value={mTitle} onChange={e => setMTitle(e.target.value)} placeholder="Ex: CA Trimestriel..." className="w-full rounded-2xl border border-slate-200/50 dark:border-slate-700/50 bg-white/50 dark:bg-slate-800/50 px-4 py-4 text-base font-bold text-slate-900 dark:text-white focus:border-blue-500 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/20 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-600" />
               </div>
               
+              <div>
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 ml-1">Date</label>
+                <input type="date" required value={mDate} onChange={e => setMDate(e.target.value)} className="w-full rounded-2xl border border-slate-200/50 dark:border-slate-700/50 bg-white/50 dark:bg-slate-800/50 px-4 py-4 text-base font-bold text-slate-900 dark:text-white focus:border-blue-500 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/20 transition-all" />
+              </div>
               <div className="flex gap-4">
                 <div className="flex-1">
-                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 ml-1">Date</label>
-                  <input type="date" required value={mDate} onChange={e => setMDate(e.target.value)} className="w-full rounded-2xl border border-slate-200/50 dark:border-slate-700/50 bg-white/50 dark:bg-slate-800/50 px-4 py-4 text-base font-bold text-slate-900 dark:text-white focus:border-blue-500 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/20 transition-all" />
+                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 ml-1">Heure de début</label>
+                  <input type="time" required value={mTime} onChange={e => setMTime(e.target.value)} className="w-full rounded-2xl border border-slate-200/50 dark:border-slate-700/50 bg-white/50 dark:bg-slate-800/50 px-4 py-4 text-base font-bold text-slate-900 dark:text-white focus:border-blue-500 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/20 transition-all" />
                 </div>
                 <div className="flex-1">
-                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 ml-1">Heure</label>
-                  <input type="time" required value={mTime} onChange={e => setMTime(e.target.value)} className="w-full rounded-2xl border border-slate-200/50 dark:border-slate-700/50 bg-white/50 dark:bg-slate-800/50 px-4 py-4 text-base font-bold text-slate-900 dark:text-white focus:border-blue-500 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/20 transition-all" />
+                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 ml-1">Heure de fin</label>
+                  <input type="time" required value={mEndTime} onChange={e => setMEndTime(e.target.value)} className="w-full rounded-2xl border border-slate-200/50 dark:border-slate-700/50 bg-white/50 dark:bg-slate-800/50 px-4 py-4 text-base font-bold text-slate-900 dark:text-white focus:border-blue-500 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-blue-500/20 transition-all" />
                 </div>
               </div>
 

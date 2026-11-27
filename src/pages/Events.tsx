@@ -34,6 +34,7 @@ type EventItem = {
   title: string;
   event_type: string;
   event_date: string;
+  end_date?: string | null;
   date_time?: string;
   location: string | null;
   description: string | null;
@@ -53,7 +54,8 @@ interface MeetingParticipant {
 export default function Events() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [pastEvents, setPastEvents] = useState<EventItem[]>([]);
-  const [activeTab, setActiveTab] = useState<'upcoming' | 'history'>('upcoming');
+  const [liveEvents, setLiveEvents] = useState<EventItem[]>([]);
+  const [activeTab, setActiveTab] = useState<'upcoming' | 'live' | 'history'>('upcoming');
   const [loading, setLoading] = useState(true);
   const [activeVisio, setActiveVisio] = useState<{ id: string; title: string; url: string } | null>(null);
   const [canManage, setCanManage] = useState(false);
@@ -203,27 +205,36 @@ export default function Events() {
   const fetchEvents = useCallback(async () => {
     try {
       setLoading(true);
-      const today = new Date().toISOString();
 
-      // Événements à venir
-      const { data: upcomingData, error: upcomingErr } = await supabase
+      // Fetch ALL events, then filter client-side for live/upcoming/past
+      const { data, error } = await supabase
         .from('events')
         .select('*')
-        .gte('event_date', today)
         .order('event_date', { ascending: true });
 
-      if (upcomingErr) throw upcomingErr;
-      if (upcomingData) setEvents(upcomingData as EventItem[]);
+      if (error) throw error;
 
-      // Historique des événements passés
-      const { data: pastData, error: pastErr } = await supabase
-        .from('events')
-        .select('*')
-        .lt('event_date', today)
-        .order('event_date', { ascending: false });
+      const now = new Date();
+      const allEvents = (data || []) as EventItem[];
 
-      if (pastErr) console.warn("Erreur chargement historique événements:", pastErr);
-      if (pastData) setPastEvents(pastData as EventItem[]);
+      const getEffectiveEnd = (item: EventItem): Date => {
+        if (item.end_date) return new Date(item.end_date);
+        return new Date(new Date(item.event_date).getTime() + 2 * 60 * 60 * 1000);
+      };
+
+      const live = allEvents.filter(item =>
+        now >= new Date(item.event_date) && now <= getEffectiveEnd(item)
+      );
+      const upcoming = allEvents.filter(item =>
+        new Date(item.event_date) > now
+      );
+      const past = allEvents
+        .filter(item => getEffectiveEnd(item) < now)
+        .sort((a, b) => new Date(b.event_date).getTime() - new Date(a.event_date).getTime());
+
+      setLiveEvents(live);
+      setEvents(upcoming);
+      setPastEvents(past);
 
     } catch (error) {
       console.error("Erreur récupération événements:", error);
@@ -264,7 +275,7 @@ export default function Events() {
     }
   };
 
-  const currentList = activeTab === 'upcoming' ? events : pastEvents;
+  const currentList = activeTab === 'upcoming' ? events : activeTab === 'live' ? liveEvents : pastEvents;
 
   return (
     <div className="flex flex-col relative pb-40 md:pb-8 h-full min-h-[calc(100vh-80px)]">
@@ -272,8 +283,8 @@ export default function Events() {
         <h1 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tight transition-colors">Événements &amp; Réunions</h1>
         <p className="text-slate-500 dark:text-slate-400 font-medium mt-1 md:text-lg transition-colors">Vos prochains rendez-vous, lives et historique des événements</p>
         
-        {/* Navigation Onglets (À venir vs Historique) */}
-        <div className="flex items-center gap-3 mt-6 border-b border-slate-200 dark:border-slate-800 pb-3">
+        {/* Navigation Onglets (À venir vs En direct vs Historique) */}
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 mt-6 border-b border-slate-200 dark:border-slate-800 pb-3">
           <button
             onClick={() => setActiveTab('upcoming')}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs md:text-sm font-black transition-all duration-300 ${
@@ -289,6 +300,25 @@ export default function Events() {
             }`}>
               {events.length}
             </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('live')}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs md:text-sm font-black transition-all duration-300 ${
+              activeTab === 'live'
+                ? 'bg-gradient-to-r from-red-600 to-rose-500 text-white shadow-lg shadow-red-600/30 scale-105'
+                : 'bg-white/60 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 border border-slate-200/50 dark:border-slate-700/50'
+            }`}
+          >
+            <Radio size={16} className={activeTab === 'live' ? 'animate-pulse' : ''} />
+            En direct
+            {liveEvents.length > 0 && (
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                activeTab === 'live' ? 'bg-white/20 text-white' : 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400'
+              }`}>
+                {liveEvents.length}
+              </span>
+            )}
           </button>
 
           <button
@@ -321,11 +351,17 @@ export default function Events() {
               <CalendarIcon size={40} className="text-slate-400 dark:text-slate-500" />
             </div>
             <h3 className="text-xl font-black text-slate-900 dark:text-white mb-2 tracking-tight">
-              {activeTab === 'upcoming' ? 'Agenda Dégagé' : 'Historique vide'}
+              {activeTab === 'upcoming'
+                ? 'Agenda Dégagé'
+                : activeTab === 'live'
+                ? 'Aucun événement en direct'
+                : 'Historique vide'}
             </h3>
             <p className="text-sm font-medium text-slate-500 dark:text-slate-400 max-w-sm">
               {activeTab === 'upcoming'
                 ? "Aucune réunion ni événement n'est programmé pour le moment."
+                : activeTab === 'live'
+                ? "Aucune réunion ni événement n'est en cours actuellement."
                 : "Aucun événement passé enregistré dans l'historique."}
             </p>
           </div>
@@ -333,8 +369,10 @@ export default function Events() {
           <div className="space-y-5">
             {currentList.map((item, index) => {
               const eventDate = parseISO(item.event_date);
+              const endDate = item.end_date ? parseISO(item.end_date) : null;
               const isOnline = item.is_online || Boolean(item.meet_url);
               const style = getEventStyle(item.event_type, isOnline);
+              const isLive = activeTab === 'live';
               const isNext = activeTab === 'upcoming' && index === 0;
               const isPast = activeTab === 'history';
 
@@ -342,11 +380,18 @@ export default function Events() {
                 <div 
                   key={item.id} 
                   className={`relative flex flex-col overflow-hidden rounded-[24px] bg-white dark:bg-slate-900 transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 z-10 ${ 
-                    isNext 
+                    isLive
+                      ? 'border-2 border-red-500 dark:border-red-500 shadow-2xl shadow-red-500/20'
+                      : isNext 
                       ? 'border-2 border-blue-600 dark:border-blue-500 shadow-2xl shadow-blue-500/20' 
                       : 'border border-slate-200/80 dark:border-slate-800 shadow-xl shadow-slate-200/50 dark:shadow-black/60'
                   }`}
                 >
+                  {isLive && (
+                    <div className="flex items-center justify-center bg-gradient-to-r from-red-600 to-rose-500 py-1.5 text-[11px] font-black tracking-widest text-white shadow-sm">
+                      <Radio size={14} className="mr-2 animate-pulse" /> EN DIRECT MAINTENANT
+                    </div>
+                  )}
                   {isNext && (
                     <div className="flex items-center justify-center bg-gradient-to-r from-blue-600 to-indigo-600 py-1.5 text-[11px] font-black tracking-widest text-white shadow-sm">
                       <Bell size={14} className="mr-2 animate-pulse" /> PROCHAIN RENDEZ-VOUS
@@ -356,16 +401,18 @@ export default function Events() {
                   <div className="flex flex-col sm:flex-row items-start sm:items-center p-5 gap-4">
                     {/* Date Box */}
                     <div className={`flex h-[75px] w-[70px] flex-col items-center justify-center rounded-[20px] shadow-sm shrink-0 ${
-                      isNext 
+                      isLive
+                        ? 'bg-red-600 text-white shadow-red-600/30'
+                        : isNext 
                         ? 'bg-blue-600 text-white shadow-blue-600/30' 
                         : isPast
                         ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
                         : 'border border-white/60 dark:border-slate-700/50 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md'
                     }`}>
-                      <span className={`text-xs font-black uppercase tracking-widest mb-0.5 ${isNext ? 'text-blue-200' : 'text-slate-500 dark:text-slate-400'}`}>
+                      <span className={`text-xs font-black uppercase tracking-widest mb-0.5 ${isLive ? 'text-red-100' : isNext ? 'text-blue-200' : 'text-slate-500 dark:text-slate-400'}`}>
                         {format(eventDate, 'MMM', { locale: fr })}
                       </span>
-                      <span className={`text-3xl font-black tracking-tighter ${isNext ? 'text-white' : 'text-slate-900 dark:text-white'}`}>
+                      <span className={`text-3xl font-black tracking-tighter ${isLive || isNext ? 'text-white' : 'text-slate-900 dark:text-white'}`}>
                         {format(eventDate, 'dd')}
                       </span>
                     </div>
@@ -376,6 +423,12 @@ export default function Events() {
                         <div className={`inline-flex items-center rounded-full border px-3 py-0.5 text-[10px] font-black uppercase tracking-widest shadow-sm ${style.bg} ${style.border} ${style.text}`}>
                           {item.event_type}
                         </div>
+                        {isLive && (
+                          <div className="inline-flex items-center gap-1 rounded-full border border-red-500/40 bg-red-500/15 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-red-600 dark:text-red-400">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping inline-block"></span>
+                            En cours
+                          </div>
+                        )}
                         {isOnline && !isPast && (
                           <div className="inline-flex items-center gap-1 rounded-full border border-red-500/30 bg-red-500/10 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-red-600 dark:text-red-400">
                             <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block"></span>
@@ -402,7 +455,9 @@ export default function Events() {
                       <div className="space-y-1.5">
                         <div className="flex items-center text-xs font-bold text-slate-600 dark:text-slate-400 transition-colors">
                           <Clock size={15} className="mr-2 text-slate-400 dark:text-slate-500" />
-                          {format(eventDate, "EEEE d MMMM 'à' HH:mm", { locale: fr })}
+                          {endDate
+                            ? `${format(eventDate, "EEEE d MMMM 'de' HH:mm", { locale: fr })} à ${format(endDate, "HH:mm")}`
+                            : format(eventDate, "EEEE d MMMM 'à' HH:mm", { locale: fr })}
                         </div>
                         {item.location && (
                           <div className="flex items-center text-xs font-bold text-slate-600 dark:text-slate-400 transition-colors">
