@@ -4,15 +4,21 @@ import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Users, Calendar, Clock, MapPin, CheckCircle, Plus, X, CalendarDays, FileText, ChevronRight, Briefcase, Video, Maximize2, ExternalLink, ShieldCheck, Settings, UserCheck, Trash2, Radio, Play } from 'lucide-react';
 
-function getEmbedUrl(url: string): string {
-  if (!url) return url;
+// Convert share/watch links to embeddable URLs
+// Returns null if the URL is a YouTube channel/homepage that cannot be embedded
+function getEmbedUrl(url: string): string | null {
+  if (!url) return null;
   const ytShort = url.match(/youtu\.be\/([\w-]+)/);
-  if (ytShort) return `https://www.youtube-nocookie.com/embed/${ytShort[1]}?autoplay=1`;
+  if (ytShort) return `https://www.youtube-nocookie.com/embed/${ytShort[1]}?autoplay=1&rel=0`;
   const ytWatch = url.match(/youtube\.com\/watch\?.*v=([\w-]+)/);
-  if (ytWatch) return `https://www.youtube-nocookie.com/embed/${ytWatch[1]}?autoplay=1`;
-  if (url.includes('youtube.com/embed') || url.includes('youtube-nocookie.com/embed')) return url;
-  // Daily.co — embeddable as-is
+  if (ytWatch) return `https://www.youtube-nocookie.com/embed/${ytWatch[1]}?autoplay=1&rel=0`;
+  const ytLive = url.match(/youtube\.com\/live\/([\w-]+)/);
+  if (ytLive) return `https://www.youtube-nocookie.com/embed/${ytLive[1]}?autoplay=1&rel=0`;
+  if (url.includes('youtube-nocookie.com/embed')) return url;
+  if (url.includes('youtube.com/embed')) return url.replace('youtube.com/embed', 'youtube-nocookie.com/embed');
+  if (url.includes('youtube.com') || url.includes('youtu.be')) return null;
   if (url.includes('daily.co')) return url;
+  if (url.includes('tiktok')) return null;
   return url;
 }
 
@@ -763,15 +769,41 @@ export default function Bureau() {
                   </a>
                 </div>
               </div>
+            ) : getLiveType(activeVisio.url) === 'youtube' && !getEmbedUrl(activeVisio.url) ? (
+              // YouTube channel/homepage — pas d'ID vidéo extractible → redirection élégante
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black text-white p-8 text-center gap-6">
+                <div className="relative">
+                  <div className="w-24 h-24 rounded-full bg-red-600 flex items-center justify-center shadow-2xl shadow-red-600/50">
+                    <Play size={40} className="text-white ml-2" fill="white" />
+                  </div>
+                  <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 animate-ping" />
+                </div>
+                <div>
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-600/20 border border-red-500/30 mb-3">
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse inline-block" />
+                    <span className="text-xs font-black text-red-400 uppercase tracking-widest">Live YouTube DMK</span>
+                  </div>
+                  <h3 className="text-xl font-black mb-2">{activeVisio.title}</h3>
+                  <p className="text-slate-400 text-sm font-medium mb-6">Ouvrez YouTube pour regarder le live directement dans l'application YouTube.</p>
+                  <a
+                    href={activeVisio.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-gradient-to-r from-red-600 to-rose-500 text-white font-black text-base shadow-lg shadow-red-600/40 hover:scale-105 transition-transform"
+                  >
+                    <ExternalLink size={18} />
+                    Ouvrir sur YouTube
+                  </a>
+                </div>
+              </div>
             ) : (
               <iframe
                 id="visio-iframe-bureau"
-                src={getEmbedUrl(activeVisio.url)}
+                src={getEmbedUrl(activeVisio.url) ?? activeVisio.url}
                 allow="camera; microphone; display-capture; autoplay; clipboard-write; fullscreen; picture-in-picture"
                 className="absolute inset-0 w-full h-full border-0"
                 title="Live DMK en Direct"
                 style={{ touchAction: 'manipulation' }}
-                allowFullScreen
               />
             )}
           </div>
